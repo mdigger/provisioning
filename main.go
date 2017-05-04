@@ -1,22 +1,27 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
+	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"time"
+
+	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/mdigger/log"
 	"github.com/mdigger/rest"
 )
 
 var (
-	appName = "provisioning"   // название сервиса
-	version = "0.2.0"          // версия
-	date    = "2017-05-04"     // дата сборки
-	build   = ""               // номер сборки в git-репозитории
-	host    = "localhost:8080" // адрес сервера и порт
+	appName = "provisioning"                 // название сервиса
+	version = "0.2.0"                        // версия
+	date    = "2017-05-04"                   // дата сборки
+	build   = ""                             // номер сборки в git-репозитории
+	host    = "provisioning.connector73.net" // адрес сервера и порт
 )
 
 func main() {
@@ -32,7 +37,7 @@ func main() {
 
 	// разбираем параметры запуска приложения
 	dbname := flag.String("db", appName+".db", "store `filename`")
-	flag.StringVar(&host, "address", host, "server address and `port`")
+	flag.StringVar(&host, "host", host, "server address and `port`")
 	flag.Parse()
 
 	// открываем хранилище данных
@@ -96,26 +101,63 @@ func main() {
 			"PUT":    store.Put(bucketUsers),
 			"DELETE": store.Remove(bucketUsers),
 		},
+		// отдача конфигурации всех сервисов и пользователей
+		"/admin/backup": rest.Methods{
+			"GET": store.Backup,
+		},
 	}, store.CheckAdmins)
 
-	mux.Handle("GET", "/backup", store.Backup)
+	// сборка единой конфигурации
 	mux.Handle("GET", "/config", store.GetConfig)
 
 	// инициализируем HTTP-сервер
 	server := &http.Server{
-		Addr:         host,
+		Addr:         ":https",
 		Handler:      mux,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 20,
 	}
-	// запускаем сервер
+
+	host, port, err := net.SplitHostPort(host)
+	if err != nil {
+		log.WithError(err).Error("bad server address")
+		os.Exit(2)
+	}
+	if host != "localhost" && host != "127.0.0.1" {
+		manager := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(host),
+			Email:      "dmitrys@xyzrd.com",
+			Cache:      autocert.DirCache("letsEncript.cache"),
+		}
+		server.TLSConfig = &tls.Config{
+			GetCertificate: manager.GetCertificate,
+		}
+	} else {
+		// исключительно для отладки
+		cert, err := tls.X509KeyPair(LocalhostCert, LocalhostKey)
+		if err != nil {
+			panic(fmt.Sprintf("local certificates error: %v", err))
+		}
+		server.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+		}
+		server.Addr = net.JoinHostPort(host, port)
+	}
+
 	go func() {
-		log.WithField("address", server.Addr).Info("starting http")
-		if err := server.ListenAndServe(); err != nil {
-			log.WithError(err).Warning("http server stoped")
+		log.WithFields(log.Fields{
+			"address": server.Addr,
+			"host":    host,
+		}).Info("starting https")
+		err = server.ListenAndServeTLS("", "")
+		// корректно закрываем сервисы по окончании работы
+		if err != nil {
+			log.WithError(err).Warning("https server stoped")
 		}
 		os.Exit(3)
 	}()
+
 	// инициализируем поддержку системных сигналов и ждем, когда он случится
 	monitorSignals(os.Interrupt, os.Kill)
 	log.Info("service stoped")
