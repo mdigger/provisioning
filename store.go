@@ -56,6 +56,8 @@ func (s *Store) CheckAdmins(c *rest.Context) error {
 		}
 		// в противном случае требуется информация об авторизации в запросе
 		if !ok {
+			realm := fmt.Sprintf("Basic realm=%s admin", appName)
+			c.SetHeader("WWW-Authenticate", realm)
 			return rest.ErrUnauthorized
 		}
 		// запрашиваем пароль администратора из хранилища
@@ -415,7 +417,9 @@ func (s *Store) GetConfig(c *rest.Context) error {
 	username, password, ok := c.BasicAuth()
 	// проверяем, что запрос с авторизацией
 	if !ok {
-		return rest.ErrForbidden
+		realm := fmt.Sprintf("Basic realm=%s", appName)
+		c.SetHeader("WWW-Authenticate", realm)
+		return rest.ErrUnauthorized
 	}
 	// делаем выборку из хранилища данных
 	return s.db.View(func(tx *bolt.Tx) error {
