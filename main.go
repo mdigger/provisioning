@@ -13,8 +13,8 @@ import (
 
 var (
 	appName = "provisioning"   // название сервиса
-	version = "0.1.2"          // версия
-	date    = "2017-04-29"     // дата сборки
+	version = "0.2.0"          // версия
+	date    = "2017-05-04"     // дата сборки
 	build   = ""               // номер сборки в git-репозитории
 	host    = "localhost:8080" // адрес сервера и порт
 )
@@ -54,43 +54,56 @@ func main() {
 		Logger:  log.Default,
 		Encoder: Encoder, // переопределяем формат вывода
 	}
-
-	// инициализируем поддержку разделов хранилища
-	sections := &Sections{store: store}
-	admins := &Admins{store: store}
+	// задаем обработчики запросов
 	mux.Handles(rest.Paths{
-		// административные права и пользователи
+		// обработчики администраторов
 		"/admin/auth": rest.Methods{
-			"GET":  admins.List,
-			"POST": admins.Post,
+			"GET":  store.List(bucketAdmins),
+			"POST": store.Post(bucketAdmins),
 		},
-		"/admin/auth/:key": rest.Methods{
-			"GET":    admins.Get,
-			"PUT":    admins.Put,
-			"DELETE": admins.Delete,
+		"/admin/auth/:name": rest.Methods{
+			"GET":    store.Get(bucketAdmins),
+			"PUT":    store.Put(bucketAdmins),
+			"DELETE": store.Remove(bucketAdmins),
 		},
-
-		// остальные разделы хранилища данных
-		"/admin/:section": rest.Methods{
-			"GET":  sections.List,
-			"POST": sections.Post,
+		// обработчики сервисов
+		"/admin/services": rest.Methods{
+			"GET":  store.List(bucketServices),
+			"POST": store.Post(bucketServices),
 		},
-		"/admin/:section/:key": rest.Methods{
-			"GET":    sections.Get,
-			"PUT":    sections.Put,
-			"DELETE": sections.Delete,
+		"/admin/services/:name": rest.Methods{
+			"GET":    store.Get(bucketServices),
+			"PUT":    store.Put(bucketServices),
+			"DELETE": store.Remove(bucketServices),
 		},
-	}, admins.Check)
-
-	// инициализируем обработчик конфигурации пользователя
-	users := &Users{store: store}
-	mux.Handle("GET", "/users/:name", users.Get)
+		// обработчики групп пользователей
+		"/admin/groups": rest.Methods{
+			"GET":  store.List(bucketGroups),
+			"POST": store.Post(bucketGroups),
+		},
+		"/admin/groups/:name": rest.Methods{
+			"GET":    store.Get(bucketGroups),
+			"PUT":    store.Put(bucketGroups),
+			"DELETE": store.Remove(bucketGroups),
+		},
+		// обработчики пользователей
+		"/admin/users": rest.Methods{
+			"GET":  store.List(bucketUsers),
+			"POST": store.Post(bucketUsers),
+		},
+		"/admin/users/:name": rest.Methods{
+			"GET":    store.Get(bucketUsers),
+			"PUT":    store.Put(bucketUsers),
+			"DELETE": store.Remove(bucketUsers),
+		},
+	}, store.CheckAdmins)
 
 	mux.Handle("GET", "/backup", store.Backup)
+	mux.Handle("GET", "/config", store.GetConfig)
 
 	// инициализируем HTTP-сервер
 	server := &http.Server{
-		Addr:         "localhost:8080", // TODO: переопределить на имя
+		Addr:         host,
 		Handler:      mux,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 20,
