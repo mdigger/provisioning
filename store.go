@@ -9,7 +9,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/boltdb/bolt"
-	"github.com/kr/pretty"
 	"github.com/mdigger/rest"
 )
 
@@ -445,8 +444,6 @@ func (s *Store) GetConfig(c *rest.Context) error {
 			return err
 		}
 
-		pretty.Println("user:", user)
-
 		// разбираем с группой, в которую входит пользователь
 		bucket = tx.Bucket([]byte(bucketGroups))
 		// если информации о группах в хранилище нет,
@@ -472,8 +469,6 @@ func (s *Store) GetConfig(c *rest.Context) error {
 			return c.Write(user.Services)
 		}
 
-		pretty.Println("group:", groupServices)
-
 		// разбираемся с конфигурациями сервисов
 		bucket = tx.Bucket([]byte(bucketServices))
 		if bucket == nil {
@@ -496,8 +491,6 @@ func (s *Store) GetConfig(c *rest.Context) error {
 			if err := json.Unmarshal(data, &service); err != nil {
 				return err
 			}
-
-			pretty.Println("service:", name, service)
 
 			// дополняем конфигурацию сервиса данными из группы
 			for serviceName, data := range groupData {
