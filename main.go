@@ -58,7 +58,7 @@ func main() {
 			"X-API-Version":     "1.0",
 			"X-Service-Version": version,
 		},
-		Logger:  log.Default,
+		Logger:  log.Default.WithField("admin", true),
 		Encoder: Encoder, // переопределяем формат вывода
 	}
 	// задаем обработчики запросов
