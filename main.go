@@ -4,10 +4,10 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -158,18 +158,14 @@ func main() {
 
 	// инициализируем сервис для пользователей
 	server := &http.Server{
-		Addr:         ":https",
+		Addr:         host,
 		Handler:      mux,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 20,
 	}
 
-	host, port, err := net.SplitHostPort(host)
-	if err != nil {
-		log.WithError(err).Error("bad server address")
-		os.Exit(2)
-	}
-	if host != "localhost" && host != "127.0.0.1" {
+	if !strings.HasPrefix(host, "localhost") &&
+		!strings.HasPrefix(host, "127.0.0.1") {
 		manager := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			HostPolicy: autocert.HostWhitelist(host),
@@ -179,6 +175,7 @@ func main() {
 		server.TLSConfig = &tls.Config{
 			GetCertificate: manager.GetCertificate,
 		}
+		server.Addr = ":https"
 	} else {
 		// исключительно для отладки
 		cert, err := tls.X509KeyPair(LocalhostCert, LocalhostKey)
@@ -188,7 +185,6 @@ func main() {
 		server.TLSConfig = &tls.Config{
 			Certificates: []tls.Certificate{cert},
 		}
-		server.Addr = net.JoinHostPort(host, port)
 	}
 
 	go func() {
