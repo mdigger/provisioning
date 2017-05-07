@@ -201,6 +201,56 @@
 
 Запрос требует авторизации пользователя на получение конфигурации. Авторизационная информация должна быть передана в заголовке запроса **HTTP Basic**.
 
+Аналогичный запрос поддерживается и административным сервером по адресу:
+
+- `GET /config/<email>`
+
+Как и все запросы к административному серверу, требуется авторизация администратора.
+
+
+### Конфигурация почты
+
+Настройка авторизации для доступа к почте gmail осуществляется по адрему `/gmail`.
+
+Чтобы задать настройки для отправки почты через Gmail, нужно выполнить несколько шагов:
+
+1. Задать идентификатор клиента и секретную строку, которую необходимо получить в Google:
+
+        POST /gmail
+
+        {
+          "client_id": "392045688696-...1i5.apps.googleusercontent.com",
+          "client_secret": "Tr2na...IyuDcitAR"
+        }
+
+2. В ответ будет возвращен URL, по которому необходимо перейти и скопировать код подтверждения авторизации.
+
+3. Добавить полученный код в запрос и передать это не сервер:
+
+        POST /gmail
+
+        {
+          "client_id": "392045688696-...1i5.apps.googleusercontent.com",
+          "client_secret": "Tr2na...IyuDcitAR",
+          "code": "4/Upw0Q2e...GTShpM"
+        }
+
+После этого конфигурация для доступа к отправке почты будет сохранено в хранилище.
+
+Кроме этого так же необходимо задать шаблон для формирования почтового сообщения:
+
+    POST /gmail/template
+
+    {
+      "subject": "Сброс пароля",
+      "template": "<a href=\"https://localhost/reset/?%s\">Сброс пароля</a>",
+      "html": true
+    }
+
+- `subject` задает заголовок сообщения
+- `template` описывает текстовый шаблон сообщения, в котором `%s` будет заменяться на код для сброса пароля
+- `html` - флаг, указывающий на то, что письмо отправляется не в текстовом, а HTML формате
+
 
 ## Примеры запросов с cURL
 
@@ -424,20 +474,72 @@
 - Удаление пользователя
 
     ```sh
-    curl -X "DELETE" "http://<aservice.name>/users/<name>" \
+    curl -X "DELETE" "http://<aservice.name>/users/<email>" \
          -u admin:"password"
     ```
 
 - Получение описания пользователя
 
     ```sh
-    curl "http://<aservice.name>/users/<name>" \
+    curl "http://<aservice.name>/users/<email>" \
          -u admin:"password"
     ```
+
+- Настройка почты
+
+    ```sh
+    curl -X "POST" "http://<aservice.name>/gmail" \
+         -H "Content-Type: text/plain; charset=utf-8" \
+         -u admin:"password" \
+         -d $'{
+      "client_id": "392045688694-la1glj9j...1i5.apps.googleusercontent.com",
+      "client_secret": "Tr2naBr...l4xIyuDcitAR"
+    }'
+
+    curl -X "POST" "http://<aservice.name>/gmail" \
+         -H "Content-Type: text/plain; charset=utf-8" \
+         -u admin:"password" \
+         -d $'{
+      "client_id": "392045688694-la1glj9j...1i5.apps.googleusercontent.com",
+      "client_secret": "Tr2naBr...l4xIyuDcitAR",
+      "code": "4/Upw0Q2eUe...cVlG8i1yG_r3dd_GTShpM"
+    }'
+    ```
+
+- Получение настроек почты
+
+    ```sh
+    curl "http://<aservice.name>/gmail" \
+        -u admin:password
+    ```
+
+- Изменение шаблона почтового сообщения
+
+    ```sh
+    curl -X "POST" "http://<aservice.name>/gmail/template" \
+         -H "Content-Type: application/json; charset=utf-8" \
+         -u admin:password \
+         -d $'{
+      "subject": "Сброс пароля",
+      "template": "<a href=\\"https://localhost/reset/?%s\\">Сброс пароля</a>",
+      "html": true
+    }'
+    ```
+
+- Получение шаблона почтового сообщения
+
+    ```sh
+    curl "http://<aservice.name>/gmail/template" \
+        -u admin:password
+    ```
+
 
 ### Конфигурация для устройства
 
 ```sh
 curl "https://<mservice.name>/config" \
      -u dmitrys@xyzrd.com:"password"
+
+curl "http://<aservice.name>/config/<email>" \
+     -u admin:"password"
 ```

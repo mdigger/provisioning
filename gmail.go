@@ -262,6 +262,9 @@ func (s *Store) StoreTemplate(c *rest.Context) error {
 	}); err != nil {
 		return err
 	}
+	s.mu.Lock()
+	s.template = gcfg
+	s.mu.Unlock()
 	return nil
 }
 

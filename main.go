@@ -18,8 +18,8 @@ import (
 
 var (
 	appName = "provisioning"                 // название сервиса
-	version = "0.2.1"                        // версия
-	date    = "2017-05-07"                   // дата сборки
+	version = "0.2.3"                        // версия
+	date    = "2017-05-08"                   // дата сборки
 	build   = ""                             // номер сборки в git-репозитории
 	host    = "provisioning.connector73.net" // имя сервера
 	ahost   = "localhost:8000"               // адрес административного сервера и порт
@@ -113,6 +113,10 @@ func main() {
 			"GET":  store.MailTemplate,
 			"POST": store.StoreTemplate,
 		},
+		// отдача конфигурации указанного пользователя
+		"/config/:name": rest.Methods{
+			"GET": store.UserConfig,
+		},
 		// отдача конфигурации всех сервисов и пользователей
 		"/backup": rest.Methods{
 			"GET": store.Backup,
@@ -149,7 +153,7 @@ func main() {
 		Encoder: Encoder, // переопределяем формат вывода
 	}
 	// сборка единой конфигурации
-	mux.Handle("GET", "/config", store.GetConfig)
+	mux.Handle("GET", "/config", store.Config)
 	mux.Handle("GET", "/test", store.testMail)
 
 	// инициализируем сервис для пользователей

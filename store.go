@@ -416,19 +416,12 @@ func (s *Store) Put(section string) rest.Handler {
 	}
 }
 
-// GetConfig возвращает конфигурацию сервисов пользователя, объединив ее со
-// всеми данными хранилища.
-func (s *Store) GetConfig(c *rest.Context) error {
-	// получаем информацию об авторизации запроса
-	username, password, ok := c.BasicAuth()
-	// проверяем, что запрос с авторизацией
-	if !ok {
-		realm := fmt.Sprintf("Basic realm=%s", appName)
-		c.SetHeader("WWW-Authenticate", realm)
-		return rest.ErrUnauthorized
-	}
+// config возвращает объединенную конфигурацию пользователя. Если указан
+// пароль, то он проверяется на совпадение с паролем пользователя.
+func (s *Store) config(username, password string) (interface{}, error) {
+	var result interface{}
 	// делаем выборку из хранилища данных
-	return s.db.View(func(tx *bolt.Tx) error {
+	err := s.db.View(func(tx *bolt.Tx) error {
 		// инициализируем доступ к разделу с данными пользователей
 		bucket := tx.Bucket([]byte(bucketUsers))
 		if bucket == nil {
@@ -445,28 +438,33 @@ func (s *Store) GetConfig(c *rest.Context) error {
 		if err := json.Unmarshal(data, user); err != nil {
 			return err
 		}
-		// проверяем пароль пользователя
-		if err := bcrypt.CompareHashAndPassword(
-			[]byte(user.Password), []byte(password)); err != nil {
-			if err == bcrypt.ErrMismatchedHashAndPassword {
-				return rest.ErrForbidden
+		// проверяем пароль пользователя, если он указан
+		if password != "" {
+			// проверяем пароль пользователя
+			if err := bcrypt.CompareHashAndPassword(
+				[]byte(user.Password), []byte(password)); err != nil {
+				if err == bcrypt.ErrMismatchedHashAndPassword {
+					return rest.ErrForbidden
+				}
+				return err
 			}
-			return err
 		}
+
+		result = user.Services
 
 		// разбираем с группой, в которую входит пользователь
 		bucket = tx.Bucket([]byte(bucketGroups))
 		// если информации о группах в хранилище нет,
 		// то отдаем информацию о сервисах пользователя "как есть"
 		if bucket == nil {
-			return c.Write(user.Services)
+			return nil
 		}
 		// запрашиваем данные из хранилища о группе пользователя
 		data = bucket.Get([]byte(user.Group))
 		// если информации о группе пользователя в хранилище нет,
 		// то отдаем информацию о сервисах пользователя "как есть"
 		if data == nil {
-			return c.Write(user.Services)
+			return nil
 		}
 		// десериализуем информацию о сервисах группы
 		groupServices := make(map[string]rest.JSON)
@@ -476,14 +474,13 @@ func (s *Store) GetConfig(c *rest.Context) error {
 		// если сервисы для группы не определены,
 		// то отдаем информацию о сервисах пользователя "как есть"
 		if len(groupServices) == 0 {
-			return c.Write(user.Services)
+			return nil
 		}
 
 		// разбираемся с конфигурациями сервисов
 		bucket = tx.Bucket([]byte(bucketServices))
 		if bucket == nil {
-			// TODO: усложнить логику
-			return c.Write(user.Services)
+			return nil
 		}
 		// инициализируем итоговую конфигурацию пользователя
 		config := make(map[string]rest.JSON)
@@ -520,11 +517,44 @@ func (s *Store) GetConfig(c *rest.Context) error {
 		for serviceName, data := range user.Services {
 			config[serviceName] = data
 		}
-		// отдаем получившуюся конфигурацию пользовательских сервисов
-		return c.Write(config)
+		result = config
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
+// Config возвращает конфигурацию сервисов пользователя, объединив ее со
+// всеми данными хранилища.
+func (s *Store) Config(c *rest.Context) error {
+	// получаем информацию об авторизации запроса
+	username, password, ok := c.BasicAuth()
+	// проверяем, что запрос с авторизацией
+	if !ok {
+		realm := fmt.Sprintf("Basic realm=%s", appName)
+		c.SetHeader("WWW-Authenticate", realm)
+		return rest.ErrUnauthorized
+	}
+	// получаем конфигурацию
+	config, err := s.config(username, password)
+	if err != nil {
+		return err
+	}
+	return c.Write(config)
+}
+
+// UserConfig отдает авторизацию пользователя, указанного в запросе.
+func (s *Store) UserConfig(c *rest.Context) error {
+	config, err := s.config(c.Param("name"), "")
+	if err != nil {
+		return err
+	}
+	return c.Write(config)
+}
+
+// Backup возвращает содержимое хранилища в виде JSON.
 func (s *Store) Backup(c *rest.Context) error {
 	return s.db.View(func(tx *bolt.Tx) error {
 		backup := make(rest.JSON)
