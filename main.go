@@ -103,6 +103,16 @@ func main() {
 			"PUT":    store.Put(bucketUsers),
 			"DELETE": store.Remove(bucketUsers),
 		},
+		// настройки почты
+		"/gmail": rest.Methods{
+			"GET":  store.MailConfig,
+			"POST": store.SetMailConfig,
+		},
+		// настройки шаблонов почты
+		"/gmail/template": rest.Methods{
+			"GET":  store.MailTemplate,
+			"POST": store.StoreTemplate,
+		},
 		// отдача конфигурации всех сервисов и пользователей
 		"/backup": rest.Methods{
 			"GET": store.Backup,

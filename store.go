@@ -4,17 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/boltdb/bolt"
 	"github.com/mdigger/rest"
+	gmail "google.golang.org/api/gmail/v1"
 )
 
 // Store описывает хранилище информации для конфигурирования устройств.
 type Store struct {
-	db *bolt.DB
+	db       *bolt.DB
+	gmail    *gmail.Service
+	template *MailTemplate
+	mu       sync.RWMutex
 }
 
 // OpenStore открывает хранилище данных.
@@ -37,6 +42,7 @@ const (
 	bucketServices = "services"
 	bucketUsers    = "users"
 	bucketAdmins   = "admins"
+	bucketConfig   = "config"
 )
 
 // CheckAdmins проверяет авторизацию запроса администратора. Если ни одного
