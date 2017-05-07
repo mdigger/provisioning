@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"mime"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/mdigger/rest"
@@ -43,4 +44,12 @@ func Bind(r *http.Request, obj interface{}) error {
 	}
 	// декодируем данные запроса в объект
 	return json.NewDecoder(r.Body).Decode(obj)
+}
+
+var emailRegexp = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+
+// ValidateEmail проверяет соответствие указанной в параметре строки на формат
+// описания email адреса.
+func ValidateEmail(email string) bool {
+	return emailRegexp.MatchString(email)
 }

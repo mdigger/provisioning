@@ -257,6 +257,11 @@ func (s *Store) Post(section string) rest.Handler {
 			objs = make(map[string][]byte, len(requestData))
 			// перебираем всех пользователей
 			for name, user := range requestData {
+				// проверяем, что имя пользователя соответствует формату email
+				if !ValidateEmail(name) {
+					return c.Error(http.StatusBadRequest,
+						fmt.Sprintf("%s is not email", name))
+				}
 				// пользователи без определения объекта будут автоматически
 				// удалены, поэтому с ними ничего делать больше не нужно
 				if user == nil {
@@ -358,6 +363,11 @@ func (s *Store) Put(section string) rest.Handler {
 			data, err = bcrypt.GenerateFromPassword(
 				[]byte(requestData.Password), bcrypt.DefaultCost)
 		case bucketUsers:
+			// проверяем, что имя пользователя соответствует формату email
+			if !ValidateEmail(name) {
+				return c.Error(http.StatusBadRequest,
+					fmt.Sprintf("%s is not email", name))
+			}
 			user := new(User)
 			if err = Bind(c.Request, &user); err != nil {
 				break
