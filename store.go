@@ -229,10 +229,8 @@ func (s *Store) Post(section string) rest.Handler {
 			// перебираем пароли админов и хешируем их, если нужно
 			for name, password := range requestData {
 				if password == "" {
-					return &rest.Error{
-						Code:    http.StatusBadRequest,
-						Message: fmt.Sprintf("admin %s password required", name),
-					}
+					return c.Error(http.StatusBadRequest,
+						fmt.Sprintf("admin %s password required", name))
 				}
 				// проверяем, что это хеш от пароля, а не сам пароль
 				// если это не так, то хешируем пароль
@@ -266,16 +264,12 @@ func (s *Store) Post(section string) rest.Handler {
 					continue
 				}
 				if user.Group == "" {
-					return &rest.Error{
-						Code:    http.StatusBadRequest,
-						Message: fmt.Sprintf("user %s group required", name),
-					}
+					return c.Error(http.StatusBadRequest,
+						fmt.Sprintf("user %s group required", name))
 				}
 				if user.Password == "" {
-					return &rest.Error{
-						Code:    http.StatusBadRequest,
-						Message: fmt.Sprintf("user %s password required", name),
-					}
+					return c.Error(http.StatusBadRequest,
+						fmt.Sprintf("user %s password required", name))
 				}
 				// проверяем, что пароль задан в виде хеша
 				if _, err := bcrypt.Cost([]byte(user.Password)); err != nil {
@@ -369,16 +363,12 @@ func (s *Store) Put(section string) rest.Handler {
 				break
 			}
 			if user.Group == "" {
-				return &rest.Error{
-					Code:    http.StatusBadRequest,
-					Message: fmt.Sprintf("user %s group required", name),
-				}
+				return c.Error(http.StatusBadRequest,
+					fmt.Sprintf("user %s group required", name))
 			}
 			if user.Password == "" {
-				return &rest.Error{
-					Code:    http.StatusBadRequest,
-					Message: fmt.Sprintf("user %s password required", name),
-				}
+				return c.Error(http.StatusBadRequest,
+					fmt.Sprintf("user %s password required", name))
 			}
 			// проверяем, что пароль задан в виде хеша
 			if _, err = bcrypt.Cost([]byte(user.Password)); err != nil {
