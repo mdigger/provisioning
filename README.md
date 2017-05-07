@@ -101,20 +101,22 @@
 
 ## REST API
 
-Для изменения сервисов, групп и пользователей используется URL `/admin/`. Если задан хотя бы один администратор системы, до доступ к этим данным требует авторизации, которая передается в заголовке **HTTP Basic** запроса.
+Для изменения сервисов, групп и пользователей используется выделенный сервера, задаваемый параметром `-ahost`. 
+
+Если задан хотя бы один администратор системы, до доступ к этим данным требует авторизации, которая передается в заголовке **HTTP Basic** запроса.
 
 Для всех типов информации поддерживаются следующие пути:
 
-- `/admin/auth` - информация об администраторах системы
-- `/admin/services` - доступ к описанию сервисов
-- `/admin/groups` - доступ к описанию групп пользователей
-- `/admin/users` - доступ к информации о пользователях
+- `/auth` - информация об администраторах системы
+- `/services` - доступ к описанию сервисов
+- `/groups` - доступ к описанию групп пользователей
+- `/users` - доступ к информации о пользователях
 
 В зависимости от метода запроса, выполняются разные действия:
 
-- `GET /admin/<section>` возвращает список зарегистрированных администраторов, сервисов, групп и пользователей
+- `GET /<section>` возвращает список зарегистрированных администраторов, сервисов, групп и пользователей
 
-- `POST /admin/<section>` позволяет добавить или изменить сразу несколько сервисов, групп или пользователей. Данные передаются в формате **JSON**. В качестве имен используются корневые ключи. Например, так можно задать или изменить сразу несколько описаний сервисов:
+- `POST /<section>` позволяет добавить или изменить сразу несколько сервисов, групп или пользователей. Данные передаются в формате **JSON**. В качестве имен используются корневые ключи. Например, так можно задать или изменить сразу несколько описаний сервисов:
 
         {
             "MX": {
@@ -142,9 +144,9 @@
             "admin@xyzrd.com": "password"
         }
 
-- `GET /admin/<section>/<name>` - возвращает описание сервиса, группы или пользователя, сохраненного в хранилище данных. Для авторизационной информации администраторов пароль не возвращается: вместо этого отдается объект со значением `{"exists": true}`.
+- `GET /<section>/<name>` - возвращает описание сервиса, группы или пользователя, сохраненного в хранилище данных. Для авторизационной информации администраторов пароль не возвращается: вместо этого отдается объект со значением `{"exists": true}`.
 
-- `PUT /admin/<section>/<name>` - позволяет изменить описание сервиса, группы или пользователя, или задать пароль администратора. Параметры передаются в теле запроса в виде JSON:
+- `PUT /<section>/<name>` - позволяет изменить описание сервиса, группы или пользователя, или задать пароль администратора. Параметры передаются в теле запроса в виде JSON:
 
         {
             "address": "89.185.256.135",
@@ -159,7 +161,7 @@
             "password": "new password"
         }
 
-- `DELETE /admin/<section>/<name>` - позволяет удалить описание сервиса, пользователя, группы или администратора. Никаких дополнительных параметров в запросе не требуется.
+- `DELETE /<section>/<name>` - позволяет удалить описание сервиса, пользователя, группы или администратора. Никаких дополнительных параметров в запросе не требуется.
 
 Статус выполнения запроса можно отслеживать по кодам возврата HTTP. Для ошибко так же возвращается их описание в виде объекта JSON:
     
@@ -193,7 +195,7 @@
 
 ### Получение конфигурации
 
-Для получения конфигурации пользователя необходимо сделать запрос: 
+Для получения конфигурации пользователя необходимо сделать запрос к основному серверу. Его имя задается параметром `-host` и для него используется только защищенное HTTPS соединение: 
     
 - `GET /config`
 
@@ -207,14 +209,14 @@
 - Возвращает список имен администраторов
 
     ```sh
-    curl "https://<service.name>/admin/auth" \
+    curl "http://<aservice.name>/auth" \
          -u admin:password
     ```
 
 - Добавление списка администраторов
 
     ```sh
-    curl -X "POST" "https://<service.name>/admin/auth" \
+    curl -X "POST" "http://<aservice.name>/auth" \
          -H "Content-Type: application/json; charset=utf-8" \
          -u admin:password \
          -d $'{
@@ -226,7 +228,7 @@
 - Изменение пароля администратора
 
     ```sh
-    curl -X "PUT" "https://<service.name>/admin/auth/<name>" \
+    curl -X "PUT" "http://<aservice.name>/auth/<name>" \
          -H "Content-Type: application/json; charset=utf-8" \
          -u admin:password \
          -d $'{
@@ -237,14 +239,14 @@
 - Удаление администратора
 
     ```sh
-    curl -X "DELETE" "https://<service.name>/admin/auth/<name>" \
+    curl -X "DELETE" "http://<aservice.name>/auth/<name>" \
          -u admin:password
     ```
 
 - Проверка администратора
 
     ```sh
-    curl -X GET "https://<service.name>/admin/auth/<name>" \
+    curl -X GET "http://<aservice.name>/auth/<name>" \
         -u "admin":"password"
     ```
 
@@ -253,14 +255,14 @@
 - Получение списка сервисов
 
     ```sh
-    curl -X GET "https://<service.name>/admin/services" \
+    curl -X GET "http://<aservice.name>/services" \
         -u "admin":"password"
     ```
 
 - Добавление или изменение описания сервисов
 
     ```sh
-    curl -X POST "https://<service.name>/admin/services" \
+    curl -X POST "http://<aservice.name>/services" \
         -H "Content-Type: text/plain; charset=utf-8" \
         -u "admin":"password"
         -d $'{
@@ -285,7 +287,7 @@
 - Изменение описание сервиса
 
     ```sh
-    curl -X PUT "https://<service.name>/admin/services/<name>" \
+    curl -X PUT "http://<aservice.name>/services/<name>" \
         -H "Content-Type: application/json; charset=utf-8" \
         -u "admin":"password"
         -d $'{
@@ -297,7 +299,7 @@
 - Удаление описания сервиса
 
     ```sh
-    curl -X DELETE "https://<service.name>/admin/services/<name>" \
+    curl -X DELETE "http://<aservice.name>/services/<name>" \
         -H "Content-Type: text/plain" \
         -u "admin":"password"
     ```
@@ -305,7 +307,7 @@
 - Получение описания сервиса
 
     ```sh
-    curl -X GET "https://<service.name>/admin/services/<name>" \
+    curl -X GET "http://<aservice.name>/services/<name>" \
         -u "admin":"password"
     ```
 
@@ -314,14 +316,14 @@
 - Получение списка групп пользователей
 
     ```sh
-    curl "https://<service.name>/admin/groups" \
+    curl "http://<aservice.name>/groups" \
          -u admin:"password"
     ```
 
 - Изменение или добавление нескольких групп пользователей
 
     ```sh
-    curl -X "POST" "https://<service.name>/admin/groups" \
+    curl -X "POST" "http://<aservice.name>/groups" \
          -H "Content-Type: application/json; charset=utf-8" \
          -u admin:"password" \
          -d $'{
@@ -342,7 +344,7 @@
 - Изменение одной группы пользователей
 
     ```sh
-    curl -X "PUT" "https://<service.name>/admin/groups/<name>" \
+    curl -X "PUT" "http://<aservice.name>/groups/<name>" \
          -H "Content-Type: application/json; charset=utf-8" \
          -u admin:"password" \
          -d $'{
@@ -355,14 +357,14 @@
 - Удаление группы пользователей
 
     ```sh
-    curl -X "DELETE" "https://<service.name>/admin/groups/<name>" \
+    curl -X "DELETE" "http://<aservice.name>/groups/<name>" \
          -u admin:"password"
     ```
 
 - Получение описания группы пользователей
 
     ```sh
-    curl "https://<service.name>/admin/groups/<name>" \
+    curl "http://<aservice.name>/groups/<name>" \
          -u admin:"password"
     ```
 
@@ -371,14 +373,14 @@
 - Получение списка пользователей
 
     ```sh
-    curl "https://<service.name>/admin/users" \
+    curl "http://<aservice.name>/users" \
          -u admin:"password"
     ```
 
 - Изменение или добавление сразу нескольких пользователей
 
     ```sh
-    curl -X "POST" "https://<service.name>/admin/users" \
+    curl -X "POST" "http://<aservice.name>/users" \
          -H "Content-Type: application/json; charset=utf-8" \
          -u admin:"password" \
          -d $'{
@@ -409,7 +411,7 @@
 - Изменение пользователя
 
     ```sh
-    curl -X "PUT" "https://<service.name>/admin/users/<name>" \
+    curl -X "PUT" "http://<aservice.name>/users/<name>" \
          -H "Content-Type: application/json; charset=utf-8" \
          -u admin:"password" \
          -d $'{
@@ -422,20 +424,20 @@
 - Удаление пользователя
 
     ```sh
-    curl -X "DELETE" "https://<service.name>/admin/users/<name>" \
+    curl -X "DELETE" "http://<aservice.name>/users/<name>" \
          -u admin:"password"
     ```
 
 - Получение описания пользователя
 
     ```sh
-    curl "https://<service.name>/admin/users/<name>" \
+    curl "http://<aservice.name>/users/<name>" \
          -u admin:"password"
     ```
 
 ### Конфигурация для устройства
 
 ```sh
-curl "https://<service.name>/config" \
+curl "https://<mservice.name>/config" \
      -u dmitrys@xyzrd.com:"password"
 ```
