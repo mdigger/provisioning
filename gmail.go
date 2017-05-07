@@ -49,7 +49,7 @@ type MailTemplate struct {
 }
 
 // Send отправляет почтовое сообщение
-func (s *Store) Send(to string, mailData interface{}) error {
+func (s *Store) Send(to, token string) error {
 	// инициализируем сервис gmail, если он не инициализирован
 	s.mu.RLock()
 	mailTemplate := s.template
@@ -111,6 +111,7 @@ func (s *Store) Send(to string, mailData interface{}) error {
 	// формируем заголовок сообщения
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "MIME-Version: %s\r\n", "1.0")
+	fmt.Fprintf(&buf, "To: %s\r\n", to)
 	fmt.Fprintf(&buf, "Subject: %s\r\n",
 		mime.QEncoding.Encode("utf-8", mailTemplate.Subject))
 	buf.WriteString("Content-Type: ")
@@ -122,14 +123,14 @@ func (s *Store) Send(to string, mailData interface{}) error {
 	buf.WriteString("\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n")
 
 	enc := quotedprintable.NewWriter(&buf)
-	_, err := io.WriteString(enc, fmt.Sprintf(mailTemplate.Template, mailData))
+	_, err := io.WriteString(enc, fmt.Sprintf(mailTemplate.Template, token))
 	if err != nil {
 		return err
 	}
 	enc.Close()
-	body := base64.RawURLEncoding.EncodeToString(buf.Bytes())
-	gmailMessage := &gmail.Message{Raw: body}
-	_, err = gmailClient.Users.Messages.Send("me", gmailMessage).Do()
+	_, err = gmailClient.Users.Messages.Send("me", &gmail.Message{
+		Raw: base64.RawURLEncoding.EncodeToString(buf.Bytes()),
+	}).Do()
 	return err
 }
 
@@ -262,4 +263,8 @@ func (s *Store) StoreTemplate(c *rest.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Store) testMail(c *rest.Context) error {
+	return s.Send("sedykh@gmail.com", "aabb010203040506070809aabb-01")
 }

@@ -150,6 +150,7 @@ func main() {
 	}
 	// сборка единой конфигурации
 	mux.Handle("GET", "/config", store.GetConfig)
+	mux.Handle("GET", "/test", store.testMail)
 
 	// инициализируем сервис для пользователей
 	server := &http.Server{
