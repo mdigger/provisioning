@@ -2,10 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"mime"
-	"net/http"
 	"regexp"
-	"strings"
 
 	"github.com/mdigger/rest"
 )
@@ -26,24 +23,6 @@ func Encoder(c *rest.Context, v interface{}) error {
 		})
 	}
 	return enc.Encode(v) // сериализуем ответ в формат JSON
-}
-
-// Bind декодирует переданные в запросе данные в объект.
-func Bind(r *http.Request, obj interface{}) error {
-	// проверяем тип запроса и данных
-	if r.Method != "POST" && r.Method != "PUT" {
-		return rest.ErrUnsupportedHTTPMethod
-	}
-	mediatype, params, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if mediatype != "application/json" {
-		return rest.ErrUnsupportedContentType
-	}
-	charset, ok := params["charset"]
-	if ok && strings.ToUpper(charset) != "UTF-8" {
-		return rest.ErrUnsupportedCharset
-	}
-	// декодируем данные запроса в объект
-	return json.NewDecoder(r.Body).Decode(obj)
 }
 
 var emailRegexp = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")

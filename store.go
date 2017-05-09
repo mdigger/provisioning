@@ -227,7 +227,7 @@ func (s *Store) Post(section string) rest.Handler {
 		case bucketAdmins:
 			requestData := make(map[string]string)
 			// производим непосредственный разбор данных
-			if err := Bind(c.Request, &requestData); err != nil {
+			if err := c.Bind(&requestData); err != nil {
 				return err
 			}
 			// инициализируем результирующий список
@@ -256,7 +256,7 @@ func (s *Store) Post(section string) rest.Handler {
 		case bucketUsers:
 			requestData := make(map[string]*User)
 			// производим непосредственный разбор данных
-			if err := Bind(c.Request, &requestData); err != nil {
+			if err := c.Bind(&requestData); err != nil {
 				return err
 			}
 			// инициализируем результирующий список
@@ -304,7 +304,7 @@ func (s *Store) Post(section string) rest.Handler {
 		default:
 			requestData := make(map[string]rest.JSON)
 			// производим непосредственный разбор данных
-			if err := Bind(c.Request, &requestData); err != nil {
+			if err := c.Bind(&requestData); err != nil {
 				return err
 			}
 			// инициализируем результирующий список
@@ -355,7 +355,7 @@ func (s *Store) Put(section string) rest.Handler {
 			requestData := new(struct {
 				Password string `json:"password"`
 			})
-			if err = Bind(c.Request, &requestData); err != nil {
+			if err = c.Bind(requestData); err != nil {
 				break
 			}
 			// проверяем, что это хеш от пароля, а не сам пароль
@@ -375,7 +375,7 @@ func (s *Store) Put(section string) rest.Handler {
 					fmt.Sprintf("%s is not email", name))
 			}
 			user := new(User)
-			if err = Bind(c.Request, &user); err != nil {
+			if err = c.Bind(user); err != nil {
 				break
 			}
 			if user.Group == "" {
@@ -402,7 +402,7 @@ func (s *Store) Put(section string) rest.Handler {
 			data, err = json.MarshalIndent(user, "", "    ")
 		default:
 			requestData := make(rest.JSON)
-			if err = Bind(c.Request, &requestData); err != nil {
+			if err = c.Bind(&requestData); err != nil {
 				break
 			}
 			// сериализуем данные описания
