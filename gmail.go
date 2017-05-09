@@ -42,6 +42,7 @@ func (gc *GmailConfig) Client() (*gmail.Service, error) {
 	return gmail.New(gc.Config().Client(context.Background(), gc.Token))
 }
 
+// MailTemplate описывает шаблон для формирования почтового сообщения.
 type MailTemplate struct {
 	Subject  string `json:"subject"`
 	Template string `json:"template"`
@@ -55,6 +56,7 @@ func (s *Store) Send(to, token string) error {
 	mailTemplate := s.template
 	gmailClient := s.gmail
 	s.mu.RUnlock()
+	// проверяем, что почтовый шаблон инициализирован
 	if mailTemplate == nil {
 		var config = new(MailTemplate)
 		if err := s.db.View(func(tx *bolt.Tx) error {
@@ -73,11 +75,13 @@ func (s *Store) Send(to, token string) error {
 		if config.Template == "" {
 			config.Template = "%s"
 		}
+		// сохраняем шаблон в глобальном объекте для быстрого доступа
 		mailTemplate = config
 		s.mu.Lock()
 		s.template = mailTemplate
 		s.mu.Unlock()
 	}
+	// проверяем, что почтовый клиент инициализирован
 	if gmailClient == nil {
 		// получаем конфигурацию для gmail
 		var gmailConfig *GmailConfig
@@ -116,18 +120,20 @@ func (s *Store) Send(to, token string) error {
 		mime.QEncoding.Encode("utf-8", mailTemplate.Subject))
 	buf.WriteString("Content-Type: ")
 	if mailTemplate.HTML {
-		buf.WriteString("text/html")
+		buf.WriteString("text/html\r\n")
 	} else {
-		buf.WriteString("text/plain")
+		buf.WriteString("text/plain\r\n")
 	}
-	buf.WriteString("\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n")
-
+	// после последнего заголовка двойной отступ
+	buf.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
+	// кодируем тело сообщения
 	enc := quotedprintable.NewWriter(&buf)
 	_, err := io.WriteString(enc, fmt.Sprintf(mailTemplate.Template, token))
 	if err != nil {
 		return err
 	}
 	enc.Close()
+	// отправляем почтовое сообщение через gmail
 	_, err = gmailClient.Users.Messages.Send("me", &gmail.Message{
 		Raw: base64.RawURLEncoding.EncodeToString(buf.Bytes()),
 	}).Do()
@@ -138,8 +144,8 @@ func (s *Store) Send(to, token string) error {
 func (s *Store) SetMailConfig(c *rest.Context) error {
 	// получаем идентификаторы для авторизации
 	gcfg := new(struct {
-		ID     string `json:"client_id"`
-		Secret string `json:"client_secret"`
+		ID     string `json:"client_id" form:"client_id"`
+		Secret string `json:"client_secret" form:"client_secret"`
 		Code   string `json:"code"`
 	})
 	if err := c.Bind(gcfg); err != nil {
@@ -178,7 +184,7 @@ func (s *Store) SetMailConfig(c *rest.Context) error {
 	if err != nil {
 		return err
 	}
-	err = s.db.Update(func(tx *bolt.Tx) error {
+	if err = s.db.Update(func(tx *bolt.Tx) error {
 		// инициализируем раздел, если он не был создан ранее
 		bucket, err := tx.CreateBucketIfNotExists([]byte(bucketConfig))
 		if err != nil {
@@ -186,8 +192,7 @@ func (s *Store) SetMailConfig(c *rest.Context) error {
 		}
 		// сохраняем данные о настройках доступа к почте в хранилище
 		return bucket.Put([]byte("gmail"), data)
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 	// сбрасываем настройки клиента
@@ -197,6 +202,7 @@ func (s *Store) SetMailConfig(c *rest.Context) error {
 	return nil
 }
 
+// MailConfig отдает идентификаторы настройки доступа к gamil.
 func (s *Store) MailConfig(c *rest.Context) error {
 	// получаем идентификаторы для авторизации
 	gcfg := new(struct {
@@ -219,6 +225,7 @@ func (s *Store) MailConfig(c *rest.Context) error {
 	return c.Write(gcfg)
 }
 
+// MailTemplate отдает настройки шаблонов для отсылки почты.
 func (s *Store) MailTemplate(c *rest.Context) error {
 	// получаем идентификаторы для авторизации
 	gcfg := new(MailTemplate)
@@ -241,6 +248,7 @@ func (s *Store) MailTemplate(c *rest.Context) error {
 	return c.Write(gcfg)
 }
 
+// StoreTemplate сохраняет настройки шаблонов отправки почты.
 func (s *Store) StoreTemplate(c *rest.Context) error {
 	gcfg := new(MailTemplate)
 	if err := c.Bind(gcfg); err != nil {
