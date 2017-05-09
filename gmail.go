@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"html/template"
 	"mime"
 	"mime/quotedprintable"
 	"net/http"
@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/mdigger/log"
 	"github.com/mdigger/rest"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
@@ -50,10 +51,11 @@ type MailTemplate struct {
 	Subject  string `json:"subject"`
 	Template string `json:"template"`
 	HTML     bool   `json:"html,omitempty"`
+	template *template.Template
 }
 
 // Send отправляет почтовое сообщение
-func (s *Store) Send(to, token string) error {
+func (s *Store) Send(to, token, name string) error {
 	// инициализируем сервис gmail, если он не инициализирован
 	s.mu.RLock()
 	mailTemplate := s.template
@@ -76,8 +78,14 @@ func (s *Store) Send(to, token string) error {
 			return err
 		}
 		if config.Template == "" {
-			config.Template = "%s"
+			config.Template = "{{.token}}"
 		}
+		// компилируем шаблон
+		t, err := template.New("").Parse(config.Template)
+		if err != nil {
+			return err
+		}
+		config.template = t
 		// сохраняем шаблон в глобальном объекте для быстрого доступа
 		mailTemplate = config
 		s.mu.Lock()
@@ -130,14 +138,20 @@ func (s *Store) Send(to, token string) error {
 	// после последнего заголовка двойной отступ
 	buf.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
 	// кодируем тело сообщения
+	if mailTemplate.template == nil {
+		log.Debug("bad compiled template")
+	}
 	enc := quotedprintable.NewWriter(&buf)
-	_, err := io.WriteString(enc, fmt.Sprintf(mailTemplate.Template, token))
-	if err != nil {
+	if err := mailTemplate.template.Execute(enc, rest.JSON{
+		"email": to,
+		"token": token,
+		"name":  name,
+	}); err != nil {
 		return err
 	}
 	enc.Close()
 	// отправляем почтовое сообщение через gmail
-	_, err = gmailClient.Users.Messages.Send("me", &gmail.Message{
+	_, err := gmailClient.Users.Messages.Send("me", &gmail.Message{
 		Raw: base64.RawURLEncoding.EncodeToString(buf.Bytes()),
 	}).Do()
 	return err
@@ -245,20 +259,20 @@ func (s *Store) MailTemplate(c *rest.Context) error {
 	}); err != nil {
 		return err
 	}
-	if gcfg.Template == "" {
-		gcfg.Template = "%s"
-	}
 	return c.Write(gcfg)
 }
 
 // StoreTemplate сохраняет настройки шаблонов отправки почты.
 func (s *Store) StoreTemplate(c *rest.Context) error {
 	gcfg := new(MailTemplate)
-	if err := c.Bind(gcfg); err != nil {
+	err := c.Bind(gcfg)
+	if err != nil {
 		return err
 	}
-	if gcfg.Template == "" {
-		gcfg.Template = "%s"
+	// проверяем валидность шаблона
+	gcfg.template, err = template.New("").Parse(gcfg.Template)
+	if err != nil {
+		return err
 	}
 	data, err := json.MarshalIndent(gcfg, "", "    ")
 	if err != nil {
@@ -287,21 +301,23 @@ type ResetData struct {
 
 // SendPassword отправляет почтовое уведомление о сбросе пароля.
 func (s *Store) SendPassword(c *rest.Context) error {
-	name := c.Param("name") // имя пользователя
+	email := c.Param("name") // имя пользователя
 	// проверяем, что указанное имя является email
-	if !ValidateEmail(name) {
+	if !ValidateEmail(email) {
 		return rest.ErrNotFound
 	}
 	// проверяем, что такой пользователь зарегистрирован
+	user := new(User)
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(bucketUsers))
 		if bucket == nil {
 			return rest.ErrNotFound
 		}
-		if data := bucket.Get([]byte(name)); data == nil {
+		data := bucket.Get([]byte(email))
+		if data == nil {
 			return rest.ErrNotFound
 		}
-		return nil
+		return json.Unmarshal(data, user)
 	}); err != nil {
 		return err
 	}
@@ -322,15 +338,15 @@ func (s *Store) SendPassword(c *rest.Context) error {
 			return err
 		}
 		// сохраняем данные о сервисе в хранилище
-		return bucket.Put([]byte(name), data)
+		return bucket.Put([]byte(email), data)
 	}); err != nil {
 		return err
 	}
 	// формируем токен
 	token := base64.RawURLEncoding.EncodeToString(
-		[]byte(fmt.Sprintf("%s:%s", name, reset.Code)))
+		[]byte(fmt.Sprintf("%s:%s", email, reset.Code)))
 	// отправляем его почтой
-	return s.Send(name, token)
+	return s.Send(email, token, user.Name)
 }
 
 var ValidTokenPeriod = time.Hour * 24 * 5
