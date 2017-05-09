@@ -43,6 +43,7 @@ const (
 	bucketUsers    = "users"
 	bucketAdmins   = "admins"
 	bucketConfig   = "config"
+	bucketReset    = "reset"
 )
 
 // CheckAdmins проверяет авторизацию запроса администратора. Если ни одного

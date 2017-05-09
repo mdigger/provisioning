@@ -11,9 +11,12 @@ import (
 	"mime"
 	"mime/quotedprintable"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/boltdb/bolt"
 	"github.com/mdigger/rest"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	gmail "google.golang.org/api/gmail/v1"
@@ -276,6 +279,136 @@ func (s *Store) StoreTemplate(c *rest.Context) error {
 	return nil
 }
 
-func (s *Store) testMail(c *rest.Context) error {
-	return s.Send("sedykh@gmail.com", "aabb010203040506070809aabb-01")
+// ResetData описывает данные для сброса пароля
+type ResetData struct {
+	Code string    `json:"code"`
+	Date time.Time `json:"created"`
+}
+
+// SendPassword отправляет почтовое уведомление о сбросе пароля.
+func (s *Store) SendPassword(c *rest.Context) error {
+	name := c.Param("name") // имя пользователя
+	// проверяем, что указанное имя является email
+	if !ValidateEmail(name) {
+		return rest.ErrNotFound
+	}
+	// проверяем, что такой пользователь зарегистрирован
+	if err := s.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(bucketUsers))
+		if bucket == nil {
+			return rest.ErrNotFound
+		}
+		if data := bucket.Get([]byte(name)); data == nil {
+			return rest.ErrNotFound
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	// формируем данные для сброса пароля
+	reset := &ResetData{
+		Code: passwordGenerator(),
+		Date: time.Now().UTC(),
+	}
+	data, err := json.MarshalIndent(reset, "", "    ")
+	if err != nil {
+		return err
+	}
+	// сохраняем в хранилище
+	if err := s.db.Update(func(tx *bolt.Tx) error {
+		// инициализируем раздел, если он не был создан ранее
+		bucket, err := tx.CreateBucketIfNotExists([]byte(bucketReset))
+		if err != nil {
+			return err
+		}
+		// сохраняем данные о сервисе в хранилище
+		return bucket.Put([]byte(name), data)
+	}); err != nil {
+		return err
+	}
+	// формируем токен
+	token := base64.RawURLEncoding.EncodeToString(
+		[]byte(fmt.Sprintf("%s:%s", name, reset.Code)))
+	// отправляем его почтой
+	return s.Send(name, token)
+}
+
+var ValidTokenPeriod = time.Hour * 24 * 5
+
+// ResetPassword заменяет пароль пользователя
+func (s *Store) ResetPassword(c *rest.Context) error {
+	// декодируем токен для сброса пароля
+	token, err := base64.RawURLEncoding.DecodeString(c.Param("token"))
+	if err != nil {
+		return c.Error(http.StatusNotFound, "bad token")
+	}
+	stoken := string(token)
+	sindex := strings.IndexByte(stoken, ':')
+	if sindex < 0 {
+		return c.Error(http.StatusNotFound, "bad token")
+	}
+	name, code := stoken[:sindex], stoken[sindex+1:]
+	// создаем новый пароль
+	password := passwordGenerator()
+	// проверяем код и заменяем пароль пользователя
+	if err := s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(bucketReset))
+		if bucket == nil {
+			return c.Error(http.StatusNotFound, "bad token")
+		}
+		// получаем данные для сброса
+		data := bucket.Get([]byte(name))
+		if data == nil {
+			return c.Error(http.StatusNotFound, "bad token")
+		}
+		// удаляем данные для сброса
+		if err := bucket.Delete([]byte(name)); err != nil {
+			return err
+		}
+		// декодируем данные для сброса пароля
+		reset := new(ResetData)
+		if err := json.Unmarshal(data, reset); err != nil {
+			return err
+		}
+		// проверяем время жизни токена и его код
+		if reset.Code != code {
+			return c.Error(http.StatusNotFound, "bad token")
+		}
+		if reset.Date.After(time.Now().Add(ValidTokenPeriod)) {
+			return c.Error(http.StatusNotFound, "token expired")
+		}
+		// обращаемся к данным пользователя
+		bucket = tx.Bucket([]byte(bucketUsers))
+		if bucket == nil {
+			return c.Error(http.StatusNotFound, "token user not found")
+		}
+		// получаем данные о пользователе
+		data = bucket.Get([]byte(name))
+		if data == nil {
+			return c.Error(http.StatusNotFound, "token user not found")
+		}
+		// декодируем данные пользователя
+		user := new(User)
+		if err := json.Unmarshal(data, user); err != nil {
+			return err
+		}
+		// хешируем новый пароль и сохраняем его у пользователя
+		data, err = bcrypt.GenerateFromPassword(
+			[]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		user.Password = string(data)
+		// кодируем данные пользователя в формат JSON
+		data, err = json.MarshalIndent(user, "", "    ")
+		if err != nil {
+			return err
+		}
+		// сохраняем новые данные пользователя в хранилище
+		return bucket.Put([]byte(name), data)
+	}); err != nil {
+		return err
+	}
+	// возвращаем новый пароль
+	return c.Write(rest.JSON{"password": password})
 }
