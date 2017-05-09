@@ -498,6 +498,15 @@
          -u admin:"password"
     ```
 
+- Получение конфигурации устройства для пользователя
+
+    ```sh
+    curl "http://<aservice.name>/config/<email>" \
+       -u admin:"password"
+    ```
+
+### Настройка почты
+
 - Настройка почты
 
     ```sh
@@ -545,14 +554,6 @@
     curl "http://<aservice.name>/gmail/template" \
         -u admin:password
     ```
-
-- Получение конфигурации устройства для пользователя
-
-    ```sh
-    curl "http://<aservice.name>/config/<email>" \
-       -u admin:"password"
-    ```
-
 
 ### Пользовательские запросы
 
