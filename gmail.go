@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
-	"github.com/mdigger/log"
 	"github.com/mdigger/rest"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
@@ -138,9 +137,6 @@ func (s *Store) Send(to, token, name string) error {
 	// после последнего заголовка двойной отступ
 	buf.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
 	// кодируем тело сообщения
-	if mailTemplate.template == nil {
-		log.Debug("bad compiled template")
-	}
 	enc := quotedprintable.NewWriter(&buf)
 	if err := mailTemplate.template.Execute(enc, rest.JSON{
 		"email": to,
