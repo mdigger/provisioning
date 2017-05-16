@@ -538,6 +538,10 @@ func (s *Store) Config(c *rest.Context) error {
 		c.SetHeader("WWW-Authenticate", realm)
 		return rest.ErrUnauthorized
 	}
+	// пароль не может быть пустым
+	if password == "" {
+		return rest.ErrForbidden
+	}
 	// получаем конфигурацию
 	config, err := s.config(username, password)
 	if err != nil {

@@ -17,12 +17,11 @@ import (
 )
 
 var (
-	appName = "provisioning"                 // название сервиса
-	version = "0.2.3"                        // версия
-	date    = "2017-05-08"                   // дата сборки
-	build   = ""                             // номер сборки в git-репозитории
-	host    = "provisioning.connector73.net" // имя сервера
-	ahost   = "localhost:8000"               // адрес административного сервера и порт
+	appName = "provisioning"           // название сервиса
+	version = "0.2.7"                  // версия
+	date    = "2017-05-16"             // дата сборки
+	host    = "config.connector73.net" // имя сервера
+	ahost   = "localhost:8000"         // адрес административного сервера и порт
 )
 
 func main() {
@@ -32,7 +31,6 @@ func main() {
 	log.WithFields(log.Fields{
 		"version": version,
 		"date":    date,
-		"build":   build,
 		"name":    appName,
 	}).Info("starting service")
 
@@ -138,8 +136,8 @@ func main() {
 		err = aserver.ListenAndServe()
 		if err != nil {
 			log.WithError(err).Warning("admin server stoped")
+			os.Exit(3)
 		}
-		os.Exit(3)
 	}()
 
 	// инициализируем мультиплексор HTTP-запросов
@@ -197,8 +195,8 @@ func main() {
 		// корректно закрываем сервисы по окончании работы
 		if err != nil {
 			log.WithError(err).Warning("https server stoped")
+			os.Exit(3)
 		}
-		os.Exit(3)
 	}()
 
 	// инициализируем поддержку системных сигналов и ждем, когда он случится
