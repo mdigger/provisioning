@@ -156,9 +156,9 @@ func main() {
 		Logger: log.Default,
 	}
 	mux.Handle("GET", "/config", store.Config)
-	mux.Handle("GET", "/reset/:name", store.PasswordToken)
+	mux.Handle("POST", "/reset/:name", store.PasswordToken)
 	mux.Handle("POST", "/password", store.SetUserPassword)
-	mux.Handle("GET", "/password/:token", store.ResetPassword)
+	mux.Handle("POST", "/password/:token", store.ResetPassword)
 
 	server := &http.Server{
 		Addr:         host,
