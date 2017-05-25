@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,151 +17,155 @@ import (
 
 var (
 	appName = "provisioning"           // название сервиса
-	version = "0.2.7"                  // версия
-	date    = "2017-05-16"             // дата сборки
+	version = "1.0.15"                 // версия
+	date    = "2017-05-25"             // дата сборки
 	host    = "config.connector73.net" // имя сервера
 	ahost   = "localhost:8000"         // адрес административного сервера и порт
 )
 
 func main() {
+	var dbname = appName + ".db" // имя файла с хранилищем
+	flag.StringVar(&ahost, "admin", ahost, "admin server address and `port`")
+	flag.StringVar(&host, "host", host, "main server `name`")
+	flag.StringVar(&dbname, "db", dbname, "store `filename`")
+	flag.Parse()
+
 	log.SetLevel(log.DebugLevel)
 	log.SetFlags(0)
-	// выводим информацию о версии сборки
 	log.WithFields(log.Fields{
 		"version": version,
 		"date":    date,
 		"name":    appName,
 	}).Info("starting service")
 
-	// разбираем параметры запуска приложения
-	dbname := flag.String("db", appName+".db", "store `filename`")
-	flag.StringVar(&host, "host", host, "main server `name`")
-	flag.StringVar(&ahost, "admin", ahost, "admin server address and `port`")
-	flag.Parse()
-
-	// открываем хранилище данных
-	log.WithField("file", *dbname).Info("opening store")
-	store, err := OpenStore(*dbname)
+	log.WithField("file", dbname).Info("opening store")
+	store, err := OpenStore(dbname)
 	if err != nil {
 		log.WithError(err).Error("opening store error")
 		os.Exit(1)
 	}
 	defer store.Close()
 
-	// инициализируем мультиплексор HTTP-запросов
-	var amux = &rest.ServeMux{
+	var adminMux = &rest.ServeMux{
 		Headers: map[string]string{
 			"Server":            "Provisioning admin/1.0",
 			"X-API-Version":     "1.0",
 			"X-Service-Version": version,
 		},
-		Logger:  log.Default.WithField("admin", true),
-		Encoder: Encoder, // переопределяем формат вывода
+		Logger: log.Default.WithField("admin", true),
 	}
-	// задаем обработчики запросов
-	amux.Handles(rest.Paths{
-		// обработчики администраторов
-		"/auth": rest.Methods{
-			"GET":  store.List(bucketAdmins),
-			"POST": store.Post(bucketAdmins),
-		},
-		"/auth/:name": rest.Methods{
-			"GET":    store.Get(bucketAdmins),
-			"PUT":    store.Put(bucketAdmins),
-			"DELETE": store.Remove(bucketAdmins),
-		},
-		// обработчики сервисов
+	adminMux.Handles(rest.Paths{
 		"/services": rest.Methods{
-			"GET":  store.List(bucketServices),
-			"POST": store.Post(bucketServices),
+			"GET": store.List(sectionServices),
 		},
 		"/services/:name": rest.Methods{
-			"GET":    store.Get(bucketServices),
-			"PUT":    store.Put(bucketServices),
-			"DELETE": store.Remove(bucketServices),
+			"GET":    store.Item(sectionServices),
+			"PUT":    store.Update(sectionServices),
+			"DELETE": store.Remove(sectionServices),
 		},
-		// обработчики групп пользователей
 		"/groups": rest.Methods{
-			"GET":  store.List(bucketGroups),
-			"POST": store.Post(bucketGroups),
+			"GET": store.List(sectionGroups),
 		},
 		"/groups/:name": rest.Methods{
-			"GET":    store.Get(bucketGroups),
-			"PUT":    store.Put(bucketGroups),
-			"DELETE": store.Remove(bucketGroups),
+			"GET":    store.Item(sectionGroups),
+			"PUT":    store.Update(sectionGroups),
+			"DELETE": store.Remove(sectionGroups),
 		},
-		// обработчики пользователей
 		"/users": rest.Methods{
-			"GET":  store.List(bucketUsers),
-			"POST": store.Post(bucketUsers),
+			"GET": store.List(sectionUsers),
 		},
 		"/users/:name": rest.Methods{
-			"GET":    store.Get(bucketUsers),
-			"PUT":    store.Put(bucketUsers),
-			"DELETE": store.Remove(bucketUsers),
+			"GET":    store.Item(sectionUsers),
+			"PUT":    store.Update(sectionUsers),
+			"DELETE": store.Remove(sectionUsers),
 		},
-		// настройки почты
-		"/gmail": rest.Methods{
-			"GET":  store.MailConfig,
-			"POST": store.SetMailConfig,
-		},
-		// настройки шаблонов почты
-		"/gmail/template": rest.Methods{
-			"GET":  store.MailTemplate,
-			"POST": store.StoreTemplate,
-		},
-		// отдача конфигурации указанного пользователя
-		"/config/:name": rest.Methods{
+		"/users/:name/config": rest.Methods{
 			"GET": store.UserConfig,
 		},
-		// отдача конфигурации всех сервисов и пользователей
+		"/admins": rest.Methods{
+			"GET": store.List(sectionAdmins),
+		},
+		"/admins/:name": rest.Methods{
+			"GET":    store.Item(sectionAdmins),
+			"PUT":    store.Update(sectionAdmins),
+			"DELETE": store.Remove(sectionAdmins),
+		},
+		"/gmail": rest.Methods{
+			"GET": store.GetGmailConfig,
+			"PUT": store.SetGmailConfig,
+		},
+		"/templates": rest.Methods{
+			"GET": store.List(sectionTemplates),
+		},
+		"/templates/:name": rest.Methods{
+			"GET":    store.Item(sectionTemplates),
+			"PUT":    store.Update(sectionTemplates),
+			"DELETE": store.Remove(sectionTemplates),
+		},
+		"/templates/:name/send/:to": rest.Methods{
+			"POST": store.SendWithTemplate,
+		},
 		"/backup": rest.Methods{
 			"GET": store.Backup,
 		},
-	}, store.CheckAdmins)
+	}, store.AdminAuth) // все запросы требуют авторизации администратора
 
 	// инициализируем HTTP-сервер для административной части сервиса
 	aserver := &http.Server{
 		Addr:         ahost,
-		Handler:      amux,
+		Handler:      adminMux,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 20,
 	}
-	// запускаем административный сервиса
 	go func() {
+		var (
+			secure = true                            // запускать с TLS
+			serts  = []string{"cert.pem", "key.pem"} // файлы с сертификатами
+		)
+		// если файлы с сертификатами отсутствуют, то не запускать TLS
+		for _, name := range serts {
+			if _, err := os.Stat(name); err != nil {
+				secure = false
+				break
+			}
+		}
 		log.WithFields(log.Fields{
 			"address": aserver.Addr,
+			"https":   secure,
 		}).Info("starting admin server")
-		err = aserver.ListenAndServe()
+		// в зависимости от наличия сертификатов запускается в соответствующем
+		// режиме
+		var err error
+		if secure {
+			err = aserver.ListenAndServeTLS(serts[0], serts[1])
+		} else {
+			err = aserver.ListenAndServe()
+		}
 		if err != nil {
 			log.WithError(err).Warning("admin server stoped")
 			os.Exit(3)
 		}
 	}()
 
-	// инициализируем мультиплексор HTTP-запросов
 	var mux = &rest.ServeMux{
 		Headers: map[string]string{
 			"Server":            "Provisioning/1.0",
 			"X-API-Version":     "1.0",
 			"X-Service-Version": version,
 		},
-		Logger:  log.Default,
-		Encoder: Encoder, // переопределяем формат вывода
+		Logger: log.Default,
 	}
-	// сборка единой конфигурации
 	mux.Handle("GET", "/config", store.Config)
-	mux.Handle("GET", "/reset/:name", store.SendPassword)
+	mux.Handle("GET", "/reset/:name", store.PasswordToken)
+	mux.Handle("POST", "/password", store.SetUserPassword)
 	mux.Handle("GET", "/password/:token", store.ResetPassword)
 
-	// инициализируем сервис для пользователей
 	server := &http.Server{
 		Addr:         host,
 		Handler:      mux,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 20,
 	}
-
 	if !strings.HasPrefix(host, "localhost") &&
 		!strings.HasPrefix(host, "127.0.0.1") {
 		manager := autocert.Manager{
@@ -175,31 +178,29 @@ func main() {
 			GetCertificate: manager.GetCertificate,
 		}
 		server.Addr = ":https"
-	} else {
-		// исключительно для отладки
-		cert, err := tls.X509KeyPair(LocalhostCert, LocalhostKey)
-		if err != nil {
-			panic(fmt.Sprintf("local certificates error: %v", err))
-		}
-		server.TLSConfig = &tls.Config{
-			Certificates: []tls.Certificate{cert},
-		}
 	}
 
 	go func() {
-		log.WithFields(log.Fields{
+		var secure = (server.Addr == ":https" || server.Addr == ":443")
+		slog := log.WithFields(log.Fields{
 			"address": server.Addr,
-			"host":    host,
-		}).Info("starting https")
-		err = server.ListenAndServeTLS("", "")
-		// корректно закрываем сервисы по окончании работы
+			"https":   secure,
+		})
+		if server.Addr != host {
+			slog = slog.WithField("host", host)
+		}
+		slog.Info("starting main server")
+		if secure {
+			err = server.ListenAndServeTLS("", "")
+		} else {
+			err = server.ListenAndServe()
+		}
 		if err != nil {
-			log.WithError(err).Warning("https server stoped")
+			log.WithError(err).Warning("main server stoped")
 			os.Exit(3)
 		}
 	}()
 
-	// инициализируем поддержку системных сигналов и ждем, когда он случится
 	monitorSignals(os.Interrupt, os.Kill)
 	log.Info("service stoped")
 }
