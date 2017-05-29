@@ -36,6 +36,7 @@ const (
 	sectionGroups    = "groups"
 	sectionServices  = "services"
 	sectionUsers     = "users"
+	sectionUserData  = "data"
 	sectionAdmins    = "admins"
 	sectionConfig    = "config"
 	sectionTemplates = "templates"

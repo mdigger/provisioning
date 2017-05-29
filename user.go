@@ -260,3 +260,51 @@ func (s *Store) ResetPassword(c *rest.Context) error {
 	}
 	return c.Write(rest.JSON{"password": string(user.Password)})
 }
+
+func (s *Store) UserDataPatch(c *rest.Context) error {
+	var patchData = make(rest.JSON)
+	if err := c.Bind(&patchData); err != nil {
+		return err
+	}
+	name := c.Param("name")
+	var userData = make(rest.JSON)
+	if err := s.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(sectionUserData))
+		if bucket == nil {
+			return nil
+		}
+		data := bucket.Get([]byte(name))
+		if data == nil {
+			return nil
+		}
+		return json.Unmarshal(data, &userData)
+	}); err != nil {
+		return err
+	}
+	for k, v := range patchData {
+		if v == nil {
+			delete(userData, k)
+		} else {
+			userData[k] = v
+		}
+	}
+	return s.save(sectionUserData, name, userData)
+}
+
+func (s *Store) UserData(c *rest.Context) error {
+	user, err := s.AuthUser(c)
+	if err != nil {
+		return err
+	}
+	return s.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(sectionUserData))
+		if bucket == nil {
+			return c.Error(http.StatusNotFound, "section not found")
+		}
+		data := bucket.Get([]byte(user.Email))
+		if data == nil {
+			return c.Error(http.StatusNotFound, "user data item not found")
+		}
+		return c.Write(data)
+	})
+}

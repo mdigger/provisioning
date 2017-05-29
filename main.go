@@ -17,8 +17,8 @@ import (
 
 var (
 	appName = "provisioning"           // название сервиса
-	version = "1.0.15"                 // версия
-	date    = "2017-05-25"             // дата сборки
+	version = "1.0.17"                 // версия
+	date    = "2017-05-30"             // дата сборки
 	host    = "config.connector73.net" // имя сервера
 	ahost   = "localhost:8000"         // адрес административного сервера и порт
 )
@@ -81,6 +81,12 @@ func main() {
 		},
 		"/users/:name/config": rest.Methods{
 			"GET": store.UserConfig,
+		},
+		"/users/:name/data": rest.Methods{
+			"GET":    store.Item(sectionUserData),
+			"PUT":    store.Update(sectionUserData),
+			"DELETE": store.Remove(sectionUserData),
+			"PATCH":  store.UserDataPatch,
 		},
 		"/admins": rest.Methods{
 			"GET": store.List(sectionAdmins),
@@ -159,6 +165,7 @@ func main() {
 	mux.Handle("POST", "/reset/:name", store.PasswordToken)
 	mux.Handle("POST", "/password", store.SetUserPassword)
 	mux.Handle("POST", "/password/:token", store.ResetPassword)
+	mux.Handle("GET", "/data", store.UserData)
 
 	server := &http.Server{
 		Addr:         host,
