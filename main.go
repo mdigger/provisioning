@@ -28,20 +28,18 @@ func main() {
 	flag.StringVar(&ahost, "admin", ahost, "admin server address and `port`")
 	flag.StringVar(&host, "host", host, "main server `name`")
 	flag.StringVar(&dbname, "db", dbname, "store `filename`")
+	flag.Var(log.Flag(), "log", "log `level`")
 	flag.Parse()
 
-	log.SetLevel(log.DebugLevel)
-	log.SetFlags(0)
-	log.WithFields(log.Fields{
-		"version": version,
-		"date":    date,
-		"name":    appName,
-	}).Info("starting service")
+	log.Info("starting service",
+		"version", version,
+		"date", date,
+		"name", appName)
 
-	log.WithField("file", dbname).Info("opening store")
+	log.Info("opening store", "file", dbname)
 	store, err := OpenStore(dbname)
 	if err != nil {
-		log.WithError(err).Error("opening store error")
+		log.Error("opening store error", "error", err)
 		os.Exit(1)
 	}
 	defer store.Close()
@@ -52,7 +50,7 @@ func main() {
 			"X-API-Version":     "1.0",
 			"X-Service-Version": version,
 		},
-		Logger: log.Default.WithField("admin", true),
+		Logger: log.New("admin"),
 	}
 	adminMux.Handles(rest.Paths{
 		"/services": rest.Methods{
@@ -135,10 +133,9 @@ func main() {
 				break
 			}
 		}
-		log.WithFields(log.Fields{
-			"address": aserver.Addr,
-			"https":   secure,
-		}).Info("starting admin server")
+		log.Info("starting admin server",
+			"address", aserver.Addr,
+			"https", secure)
 		// в зависимости от наличия сертификатов запускается в соответствующем
 		// режиме
 		var err error
@@ -148,7 +145,7 @@ func main() {
 			err = aserver.ListenAndServe()
 		}
 		if err != nil {
-			log.WithError(err).Warning("admin server stoped")
+			log.Warn("admin server stoped", "error", err)
 			os.Exit(3)
 		}
 	}()
@@ -159,7 +156,7 @@ func main() {
 			"X-API-Version":     "1.0",
 			"X-Service-Version": version,
 		},
-		Logger: log.Default,
+		Logger: log.New("http"),
 	}
 	mux.Handle("GET", "/config", store.Config)
 	mux.Handle("POST", "/reset/:name", store.PasswordToken)
@@ -189,12 +186,9 @@ func main() {
 
 	go func() {
 		var secure = (server.Addr == ":https" || server.Addr == ":443")
-		slog := log.WithFields(log.Fields{
-			"address": server.Addr,
-			"https":   secure,
-		})
+		slog := log.With("address", server.Addr, "https", secure)
 		if server.Addr != host {
-			slog = slog.WithField("host", host)
+			slog = slog.With("host", host)
 		}
 		slog.Info("starting main server")
 		if secure {
@@ -203,7 +197,7 @@ func main() {
 			err = server.ListenAndServe()
 		}
 		if err != nil {
-			log.WithError(err).Warning("main server stoped")
+			log.Warn("main server stoped", "error", err)
 			os.Exit(3)
 		}
 	}()
