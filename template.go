@@ -10,9 +10,8 @@ import (
 	"mime"
 	"mime/quotedprintable"
 
+	bolt "go.etcd.io/bbolt"
 	gmail "google.golang.org/api/gmail/v1"
-
-	"github.com/boltdb/bolt"
 )
 
 // MailTemplate описывает шаблон для формирования почтового сообщения.

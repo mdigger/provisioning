@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boltdb/bolt"
 	"github.com/mdigger/rest"
+	bolt "go.etcd.io/bbolt"
 )
 
 // Store описывает хранилище с информацией.

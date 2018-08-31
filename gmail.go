@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/boltdb/bolt"
 	"github.com/mdigger/rest"
+	bolt "go.etcd.io/bbolt"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	gmail "google.golang.org/api/gmail/v1"
