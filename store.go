@@ -49,7 +49,7 @@ func (s *Store) List(section string) rest.Handler {
 	return func(c *rest.Context) error {
 		var list []string
 		if err := s.db.View(func(tx *bolt.Tx) error {
-			bucket := tx.Bucket([]byte(section))
+			var bucket = tx.Bucket([]byte(section))
 			if bucket == nil {
 				return c.Error(http.StatusNotFound, "section not found")
 			}
@@ -73,12 +73,12 @@ func (s *Store) List(section string) rest.Handler {
 func (s *Store) Item(section string) rest.Handler {
 	return func(c *rest.Context) error {
 		return s.db.View(func(tx *bolt.Tx) error {
-			bucket := tx.Bucket([]byte(section))
+			var bucket = tx.Bucket([]byte(section))
 			if bucket == nil {
 				return c.Error(http.StatusNotFound, "section not found")
 			}
-			name := c.Param("name")
-			data := bucket.Get([]byte(name))
+			var name = c.Param("name")
+			var data = bucket.Get([]byte(name))
 			if data == nil {
 				return c.Error(http.StatusNotFound, "item not found")
 			}
@@ -102,11 +102,11 @@ func (s *Store) Item(section string) rest.Handler {
 func (s *Store) Remove(section string) rest.Handler {
 	return func(c *rest.Context) error {
 		return s.db.Update(func(tx *bolt.Tx) error {
-			bucket := tx.Bucket([]byte(section))
+			var bucket = tx.Bucket([]byte(section))
 			if bucket == nil {
 				return c.Error(http.StatusNotFound, "section not found")
 			}
-			name := c.Param("name")
+			var name = c.Param("name")
 			if bucket.Get([]byte(name)) == nil {
 				return c.Error(http.StatusNotFound, "item not found")
 			}
@@ -151,8 +151,8 @@ func (s *Store) save(section, name string, obj interface{}) error {
 // раздела, поддерживается разная обработка входящих данных в запросе.
 func (s *Store) Update(section string) rest.Handler {
 	return func(c *rest.Context) error {
-		name := c.Param("name") // получаем имя ключа
-		var obj interface{}     // объект для сохранения
+		var name = c.Param("name") // получаем имя ключа
+		var obj interface{}        // объект для сохранения
 		// в зависимости от раздела, разбираем входящие данные
 		switch section {
 		default: // обрабатываем любые данные как JSON
@@ -179,7 +179,7 @@ func (s *Store) Update(section string) rest.Handler {
 			user.Updated = time.Now().UTC()
 			obj = user
 		case sectionAdmins: // пароли администратора
-			data := new(struct {
+			var data = new(struct {
 				Password `json:"password"`
 			})
 			if err := c.Bind(data); err != nil {
@@ -209,19 +209,19 @@ func (s *Store) Update(section string) rest.Handler {
 func (s *Store) AdminAuth(c *rest.Context) error {
 	username, password, ok := c.BasicAuth()
 	return s.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(sectionAdmins))
+		var bucket = tx.Bucket([]byte(sectionAdmins))
 		// если раздел не задан или в нем нет ни одной записи,
 		// то авторизация не требуется
 		if bucket == nil || bucket.Stats().KeyN == 0 {
 			return nil
 		}
 		if !ok {
-			realm := fmt.Sprintf("Basic realm=%s admin", appName)
+			var realm = fmt.Sprintf("Basic realm=%s admin", appName)
 			c.SetHeader("WWW-Authenticate", realm)
 			return rest.ErrUnauthorized
 		}
 		c.AddLogField("admin", username) // добавляем в лог имя администратора
-		data := bucket.Get([]byte(username))
+		var data = bucket.Get([]byte(username))
 		if data == nil {
 			return c.Error(http.StatusForbidden, "bad admin name")
 		}
@@ -234,12 +234,12 @@ func (s *Store) AdminAuth(c *rest.Context) error {
 
 // Backup отдает представление хранилища в виде одного большого JSON пакета.
 func (s *Store) Backup(c *rest.Context) error {
-	result := make(rest.JSON) // результирующий JSON
+	var result = make(rest.JSON) // результирующий JSON
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
-			section := make(rest.JSON)
+			var section = make(rest.JSON)
 			if err := b.ForEach(func(k, v []byte) error {
-				name := string(k) // ключ
+				var name = string(k) // ключ
 				if v == nil {
 					section[name] = nil
 				} else if len(v) > 1 && v[0] == '{' {

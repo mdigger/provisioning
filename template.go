@@ -40,7 +40,7 @@ func (mt *MailTemplate) Send(client *gmail.Service,
 		buf.WriteString("text/plain\r\n")
 	}
 	buf.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
-	enc := quotedprintable.NewWriter(buf)
+	var enc = quotedprintable.NewWriter(buf)
 	if err := mt.template.Execute(enc, data); err != nil {
 		return err
 	}
@@ -55,11 +55,11 @@ func (mt *MailTemplate) Send(client *gmail.Service,
 func (s *Store) Template(name string) (*MailTemplate, error) {
 	var config = new(MailTemplate)
 	if err := s.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(sectionTemplates))
+		var bucket = tx.Bucket([]byte(sectionTemplates))
 		if bucket == nil {
 			return errors.New("email templates is not configured")
 		}
-		data := bucket.Get([]byte(name))
+		var data = bucket.Get([]byte(name))
 		if data == nil {
 			return fmt.Errorf("email template %s is not configured", name)
 		}

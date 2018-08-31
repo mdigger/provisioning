@@ -14,7 +14,7 @@ type Password string
 // MarshalText преобразует строку с паролем в bcrypt-hash, если это не было
 // сделано до этого. В противном случае строка остается в неизменном виде.
 func (p Password) MarshalText() ([]byte, error) {
-	data := []byte(p)
+	var data = []byte(p)
 	if _, err := bcrypt.Cost(data); err == nil {
 		return data, nil
 	}
@@ -23,7 +23,7 @@ func (p Password) MarshalText() ([]byte, error) {
 
 // Compare возвращает true, если пароль совпадает с указанным в параметре.
 func (p Password) Compare(password string) bool {
-	data := []byte(p)
+	var data = []byte(p)
 	// если пароль не хеширован, то просто сравниваем строки
 	if _, err := bcrypt.Cost(data); err != nil {
 		return string(p) == password
@@ -31,6 +31,7 @@ func (p Password) Compare(password string) bool {
 	return bcrypt.CompareHashAndPassword(data, []byte(password)) == nil
 }
 
+// NewPassword возвращает новый случайный пароль для пользователя.
 func NewPassword() Password {
 	const dictionary = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 	var bytes = make([]byte, 12)

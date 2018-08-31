@@ -17,8 +17,8 @@ import (
 
 var (
 	appName = "provisioning"           // название сервиса
-	version = "1.0.17"                 // версия
-	date    = "2017-05-30"             // дата сборки
+	version = "2.0"                    // версия
+	date    string                     // дата сборки
 	host    = "config.connector73.net" // имя сервера
 	ahost   = "localhost:8000"         // адрес административного сервера и порт
 )
@@ -164,7 +164,7 @@ func main() {
 	mux.Handle("POST", "/password/:token", store.ResetPassword)
 	mux.Handle("GET", "/data", store.UserData)
 
-	server := &http.Server{
+	var server = &http.Server{
 		Addr:         host,
 		Handler:      mux,
 		ReadTimeout:  time.Second * 10,
@@ -172,7 +172,7 @@ func main() {
 	}
 	if !strings.HasPrefix(host, "localhost") &&
 		!strings.HasPrefix(host, "127.0.0.1") {
-		manager := autocert.Manager{
+		var manager = autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			HostPolicy: autocert.HostWhitelist(host),
 			Email:      "dmitrys@xyzrd.com",
@@ -186,7 +186,7 @@ func main() {
 
 	go func() {
 		var secure = (server.Addr == ":https" || server.Addr == ":443")
-		slog := log.With("address", server.Addr, "https", secure)
+		var slog = log.With("address", server.Addr, "https", secure)
 		if server.Addr != host {
 			slog = slog.With("host", host)
 		}

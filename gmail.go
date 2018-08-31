@@ -29,18 +29,18 @@ type GmailConfig struct {
 // уведомлений.
 func (s *Store) GmailClient() (*gmail.Service, error) {
 	mu.RLock()
-	service := gmailService
+	var service = gmailService
 	mu.RUnlock()
 	if service != nil {
 		return service, nil // сервис уже инициализирован
 	}
-	gcfg := new(GmailConfig)
+	var gcfg = new(GmailConfig)
 	if err := s.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(sectionConfig))
+		var bucket = tx.Bucket([]byte(sectionConfig))
 		if bucket == nil {
 			return nil
 		}
-		data := bucket.Get([]byte("gmail"))
+		var data = bucket.Get([]byte("gmail"))
 		if data == nil {
 			return nil
 		}
@@ -66,6 +66,7 @@ func (s *Store) GmailClient() (*gmail.Service, error) {
 	return service, nil
 }
 
+// Send отсылает пользователю почтовое сообщение, используя шаблон.
 func (s *Store) Send(user *User, templateName string, data rest.JSON) error {
 	client, err := s.GmailClient()
 	if err != nil {
@@ -86,7 +87,7 @@ func (s *Store) SendWithTemplate(c *rest.Context) error {
 	if err != nil {
 		return err
 	}
-	data := make(rest.JSON)
+	var data = make(rest.JSON)
 	if err := c.Bind(&data); err != nil {
 		return err
 	}
@@ -96,16 +97,16 @@ func (s *Store) SendWithTemplate(c *rest.Context) error {
 // GetGmailConfig отдает настройки почты. Отдается только идентификатор и
 // секретный ключ. Токен, полученный при авторизации, не отдается.
 func (s *Store) GetGmailConfig(c *rest.Context) error {
-	gcfg := new(struct {
+	var gcfg = new(struct {
 		ID     string `json:"id"`
 		Secret string `json:"secret"`
 	})
 	if err := s.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(sectionConfig))
+		var bucket = tx.Bucket([]byte(sectionConfig))
 		if bucket == nil {
 			return nil
 		}
-		data := bucket.Get([]byte("gmail"))
+		var data = bucket.Get([]byte("gmail"))
 		if data == nil {
 			return nil
 		}
@@ -118,7 +119,7 @@ func (s *Store) GetGmailConfig(c *rest.Context) error {
 
 // SetGmailConfig обрабатывает настройку почты.
 func (s *Store) SetGmailConfig(c *rest.Context) error {
-	gcfg := new(struct {
+	var gcfg = new(struct {
 		ID     string `json:"id" form:"id"`
 		Secret string `json:"secret"`
 		Code   string `json:"code"`
@@ -132,7 +133,7 @@ func (s *Store) SetGmailConfig(c *rest.Context) error {
 	if gcfg.Secret == "" {
 		return c.Error(http.StatusBadRequest, "secret required")
 	}
-	cfg := &oauth2.Config{
+	var cfg = &oauth2.Config{
 		ClientID:     gcfg.ID,
 		ClientSecret: gcfg.Secret,
 		RedirectURL:  "urn:ietf:wg:oauth:2.0:oob",

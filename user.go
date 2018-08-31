@@ -14,10 +14,11 @@ import (
 
 // User описывает структуру данных пользователя.
 type User struct {
-	Email    string               `json:"-"`                  // email адрес
+	Email    string               `json:"-"`     // email адрес
+	Group    string               `json:"group"` // название группы
+	Tenant   string               `json:"tenant,omitempty"`
+	Password Password             `json:"password,omitempty"` // хеш пароля пользователя
 	Name     string               `json:"name,omitempty"`     // имя пользователя
-	Password Password             `json:"password"`           // хеш пароля пользователя
-	Group    string               `json:"group"`              // название группы
 	Services map[string]rest.JSON `json:"services,omitempty"` // параметры сервисов
 	Updated  time.Time            `json:"updated"`            // время обновления
 }
@@ -26,11 +27,11 @@ type User struct {
 func (s *Store) User(username string) (*User, error) {
 	var user *User
 	if err := s.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(sectionUsers))
+		var bucket = tx.Bucket([]byte(sectionUsers))
 		if bucket == nil {
 			return rest.ErrNotFound
 		}
-		data := bucket.Get([]byte(username))
+		var data = bucket.Get([]byte(username))
 		if data == nil {
 			return rest.ErrNotFound
 		}
@@ -45,9 +46,10 @@ func (s *Store) User(username string) (*User, error) {
 
 // AuthUser возвращает информацию об авторизованном пользователе.
 func (s *Store) AuthUser(c *rest.Context) (*User, error) {
+	// TODO: добавить авторизацию по токену
 	username, password, ok := c.BasicAuth()
 	if !ok {
-		realm := fmt.Sprintf("Basic realm=%s", appName)
+		var realm = fmt.Sprintf("Basic realm=%s", appName)
 		c.SetHeader("WWW-Authenticate", realm)
 		return nil, rest.ErrUnauthorized
 	}
@@ -70,15 +72,15 @@ func (s *Store) AuthUser(c *rest.Context) (*User, error) {
 func (s *Store) config(user *User) (interface{}, error) {
 	var result interface{} = user.Services
 	if err := s.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(sectionGroups))
+		var bucket = tx.Bucket([]byte(sectionGroups))
 		if bucket == nil {
 			return nil
 		}
-		data := bucket.Get([]byte(user.Group))
+		var data = bucket.Get([]byte(user.Group))
 		if data == nil {
 			return nil
 		}
-		groupServices := make(map[string]rest.JSON)
+		var groupServices = make(map[string]rest.JSON)
 		if err := json.Unmarshal(data, &groupServices); err != nil {
 			return err
 		}
@@ -90,14 +92,14 @@ func (s *Store) config(user *User) (interface{}, error) {
 		if bucket == nil {
 			return nil
 		}
-		config := make(map[string]rest.JSON)
+		var config = make(map[string]rest.JSON)
 		for name, groupData := range groupServices {
 			data = bucket.Get([]byte(name))
 			if data == nil {
 				config[name] = groupData
 				continue
 			}
-			service := make(rest.JSON)
+			var service = make(rest.JSON)
 			if err := json.Unmarshal(data, &service); err != nil {
 				return err
 			}
@@ -156,7 +158,7 @@ func (s *Store) SetUserPassword(c *rest.Context) error {
 	if err != nil {
 		return err
 	}
-	data := new(struct {
+	var data = new(struct {
 		Password string `json:"password"`
 	})
 	if err := c.Bind(data); err != nil {
@@ -185,18 +187,19 @@ func (s *Store) PasswordToken(c *rest.Context) error {
 	if err != nil {
 		return err
 	}
-	reset := &ResetData{
+	var reset = &ResetData{
 		Code: NewPassword(),
 		Date: time.Now().UTC(),
 	}
 	if err := s.save(sectionReset, user.Email, reset); err != nil {
 		return err
 	}
-	token := base64.RawURLEncoding.EncodeToString(
+	var token = base64.RawURLEncoding.EncodeToString(
 		[]byte(fmt.Sprintf("%s:%s", user.Email, reset.Code)))
 	return s.Send(user, "resetPassword", rest.JSON{"token": token})
 }
 
+// ValidTokenPeriod определяет время действия токена для замены пароля.
 var ValidTokenPeriod = time.Hour * 24 * 5
 
 // ResetPassword устанавливает новый пароль пользователя.
@@ -205,19 +208,19 @@ func (s *Store) ResetPassword(c *rest.Context) error {
 	if err != nil {
 		return c.Error(http.StatusNotFound, "bad token")
 	}
-	stoken := string(token)
-	sindex := strings.IndexByte(stoken, ':')
+	var stoken = string(token)
+	var sindex = strings.IndexByte(stoken, ':')
 	if sindex < 0 {
 		return c.Error(http.StatusNotFound, "bad token")
 	}
-	name, code := stoken[:sindex], stoken[sindex+1:]
+	var name, code = stoken[:sindex], stoken[sindex+1:]
 	if err := s.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(sectionReset))
+		var bucket = tx.Bucket([]byte(sectionReset))
 		if bucket == nil {
 			return c.Error(http.StatusNotFound, "bad token")
 		}
 		// получаем данные для сброса
-		data := bucket.Get([]byte(name))
+		var data = bucket.Get([]byte(name))
 		if data == nil {
 			return c.Error(http.StatusNotFound, "bad token")
 		}
@@ -226,7 +229,7 @@ func (s *Store) ResetPassword(c *rest.Context) error {
 			return err
 		}
 		// декодируем данные для сброса пароля
-		reset := new(ResetData)
+		var reset = new(ResetData)
 		if err := json.Unmarshal(data, reset); err != nil {
 			return err
 		}
@@ -261,19 +264,20 @@ func (s *Store) ResetPassword(c *rest.Context) error {
 	return c.Write(rest.JSON{"password": string(user.Password)})
 }
 
+// UserDataPatch обновляет дополнительную пользовательскую информацию.
 func (s *Store) UserDataPatch(c *rest.Context) error {
 	var patchData = make(rest.JSON)
 	if err := c.Bind(&patchData); err != nil {
 		return err
 	}
-	name := c.Param("name")
+	var name = c.Param("name")
 	var userData = make(rest.JSON)
 	if err := s.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(sectionUserData))
+		var bucket = tx.Bucket([]byte(sectionUserData))
 		if bucket == nil {
 			return nil
 		}
-		data := bucket.Get([]byte(name))
+		var data = bucket.Get([]byte(name))
 		if data == nil {
 			return nil
 		}
@@ -291,17 +295,18 @@ func (s *Store) UserDataPatch(c *rest.Context) error {
 	return s.save(sectionUserData, name, userData)
 }
 
+// UserData отдает дополнительные пользовательские данные.
 func (s *Store) UserData(c *rest.Context) error {
 	user, err := s.AuthUser(c)
 	if err != nil {
 		return err
 	}
 	return s.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(sectionUserData))
+		var bucket = tx.Bucket([]byte(sectionUserData))
 		if bucket == nil {
 			return c.Error(http.StatusNotFound, "section not found")
 		}
-		data := bucket.Get([]byte(user.Email))
+		var data = bucket.Get([]byte(user.Email))
 		if data == nil {
 			return c.Error(http.StatusNotFound, "user data item not found")
 		}
