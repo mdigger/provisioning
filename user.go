@@ -96,7 +96,7 @@ func (s *Store) AuthUser(c *rest.Context) (*User, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !user.Password.Compare(password) {
+		if user.Password == "" || !user.Password.Compare(password) {
 			return nil, rest.ErrForbidden
 		}
 		return user, nil
@@ -226,6 +226,9 @@ func (s *Store) PasswordToken(c *rest.Context) error {
 	user, err := s.User(c.Param("name"))
 	if err != nil {
 		return err
+	}
+	if user.Tenant != "" {
+		return rest.NewError(http.StatusForbidden, "azure ad user password reset forbidden")
 	}
 	var reset = &ResetData{
 		Code: NewPassword(),
