@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -30,7 +31,10 @@ func main() {
 	var letsencrypt = flag.String("letsencrypt", app.Env("LETSENCRYPT_HOST", ""),
 		"domain `host` name")
 	var dbname = appName + ".db" // имя файла с хранилищем
-	flag.StringVar(&dbname, "db", dbname, "store `filename`")
+	if app.IsDocker() {
+		dbname = path.Join("db", dbname)
+	}
+	flag.StringVar(&dbname, "db", app.Env("DB", dbname), "store `filename`")
 	flag.Parse()
 
 	// выводим в лог информацию о версии сервиса

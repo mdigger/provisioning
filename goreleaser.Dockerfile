@@ -12,5 +12,5 @@ COPY --from=alpine /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY provisioning /
 ENV PORT="8000" LOG=""
 EXPOSE ${PORT}
-VOLUME ["/letsEncrypt.cache", "/certs"]
+VOLUME ["/letsEncrypt.cache", "/certs", "/db"]
 ENTRYPOINT ["/provisioning"]
