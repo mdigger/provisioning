@@ -173,7 +173,7 @@ func (s *Store) Update(section string) rest.Handler {
 			if user.Group == "" {
 				return c.Error(http.StatusBadRequest, "user group required")
 			}
-			if user.Password == "" {
+			if user.Tenant == "" && user.Password == "" {
 				return c.Error(http.StatusBadRequest, "user password required")
 			}
 			user.Updated = time.Now().UTC()

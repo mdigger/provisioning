@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/mdigger/jwt"
 	"github.com/mdigger/rest"
 	bolt "go.etcd.io/bbolt"
 )
@@ -46,25 +48,63 @@ func (s *Store) User(username string) (*User, error) {
 
 // AuthUser возвращает информацию об авторизованном пользователе.
 func (s *Store) AuthUser(c *rest.Context) (*User, error) {
-	// TODO: добавить авторизацию по токену
-	username, password, ok := c.BasicAuth()
-	if !ok {
+	// запрашивает токен авторизации из заголовка
+	switch auth := c.Header("Authorization"); {
+	case strings.HasPrefix(auth, "Bearer "):
+		var token = strings.TrimPrefix(auth, "Bearer ") // авторизационный токен
+		// необходимо проверить новый токен на валидность
+		claim, err := jwt.Verify(token, authKeys.GetKey)
+		if err != nil {
+			// отдельно подменяем ошибку получения списка ключей
+			if err, ok := err.(*url.Error); ok {
+				return nil, rest.NewError(http.StatusServiceUnavailable, err.Error())
+			}
+			// во всех остальных случаях виноват неверный токен
+			return nil, rest.NewError(http.StatusForbidden, err.Error())
+		}
+		// токен проверен — распаковываем содержимое
+		var info = new(struct {
+			ID     string `json:"upn"`
+			Tenant string `json:"tid"`
+		})
+		if err = json.Unmarshal(claim, &info); err != nil {
+			return nil, err
+		}
+		c.AddLogField("user", info.ID) // добавляем в лог имя пользователя
+		// подгружаем информацию о пользователе по его идентификатору
+		user, err := s.User(info.ID)
+		if err == rest.ErrNotFound {
+			return nil, rest.ErrForbidden
+		}
+		if err != nil {
+			return nil, err
+		}
+		if user.Tenant == "" || user.Tenant != info.Tenant {
+			return nil, rest.NewError(http.StatusForbidden, "bad user azure tenant")
+		}
+		return user, nil
+	case strings.HasPrefix(auth, "Basic "):
+		username, password, ok := c.BasicAuth()
+		if !ok {
+			return nil, rest.ErrForbidden
+		}
+		c.AddLogField("user", username) // добавляем в лог имя пользователя
+		user, err := s.User(username)
+		if err == rest.ErrNotFound {
+			return nil, rest.ErrForbidden
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !user.Password.Compare(password) {
+			return nil, rest.ErrForbidden
+		}
+		return user, nil
+	default:
 		var realm = fmt.Sprintf("Basic realm=%s", appName)
 		c.SetHeader("WWW-Authenticate", realm)
 		return nil, rest.ErrUnauthorized
 	}
-	c.AddLogField("user", username) // добавляем в лог имя пользователя
-	user, err := s.User(username)
-	if err == rest.ErrNotFound {
-		return nil, rest.ErrForbidden
-	}
-	if err != nil {
-		return nil, err
-	}
-	if !user.Password.Compare(password) {
-		return nil, rest.ErrForbidden
-	}
-	return user, nil
 }
 
 // config возвращает объединенный конфигурационный файл для указанного
