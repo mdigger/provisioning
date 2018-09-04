@@ -26,7 +26,7 @@ var (
 func main() {
 	var ahost = flag.String("admin", app.Env("ADMIN", "localhost:8000"),
 		"admin server address and `port`")
-	var httphost = flag.String("port", app.Env("PORT", ":8000"),
+	var httphost = flag.String("port", app.Env("PORT", ":8080"),
 		"http server `port`")
 	var letsencrypt = flag.String("letsencrypt", app.Env("LETSENCRYPT_HOST", ""),
 		"domain `host` name")
