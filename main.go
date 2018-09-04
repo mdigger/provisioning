@@ -18,7 +18,7 @@ import (
 
 var (
 	appName = "provisioning" // название сервиса
-	version = "2.0"          // версия
+	version = "2.1"          // версия
 	commit  string           // идентификатор GIT
 	date    string           // дата сборки
 )
