@@ -1,40 +1,48 @@
 package main
 
 import (
-	"crypto/tls"
+	"context"
 	"flag"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/acme/autocert"
-
+	app "github.com/mdigger/app-info"
 	"github.com/mdigger/log"
 	"github.com/mdigger/rest"
 )
 
 var (
-	appName = "provisioning"           // название сервиса
-	version = "2.0"                    // версия
-	date    string                     // дата сборки
-	host    = "config.connector73.net" // имя сервера
-	ahost   = "localhost:8000"         // адрес административного сервера и порт
+	appName = "provisioning" // название сервиса
+	version = "2.0"          // версия
+	commit  string           // идентификатор GIT
+	date    string           // дата сборки
 )
 
 func main() {
+	var ahost = flag.String("admin", app.Env("ADMIN", "localhost:8000"),
+		"admin server address and `port`")
+	var httphost = flag.String("port", app.Env("PORT", ":8000"),
+		"http server `port`")
+	var letsencrypt = flag.String("letsencrypt", app.Env("LETSENCRYPT_HOST", ""),
+		"domain `host` name")
 	var dbname = appName + ".db" // имя файла с хранилищем
-	flag.StringVar(&ahost, "admin", ahost, "admin server address and `port`")
-	flag.StringVar(&host, "host", host, "main server `name`")
 	flag.StringVar(&dbname, "db", dbname, "store `filename`")
-	flag.Var(log.Flag(), "log", "log `level`")
 	flag.Parse()
 
-	log.Info("starting service",
-		"version", version,
-		"date", date,
-		"name", appName)
+	// выводим в лог информацию о версии сервиса
+	app.Parse(appName, version, commit, date)
+	log.Info("service", app.LogInfo())
+
+	// разбираем имя хоста и порт, на котором будет слушать веб-сервер
+	port, err := app.Port(*httphost)
+	if err != nil {
+		log.Error("http host parse error", err)
+		os.Exit(2)
+	}
 
 	log.Info("opening store", "file", dbname)
 	store, err := OpenStore(dbname)
@@ -46,8 +54,8 @@ func main() {
 
 	var adminMux = &rest.ServeMux{
 		Headers: map[string]string{
-			"Server":            "Provisioning admin/1.0",
-			"X-API-Version":     "1.0",
+			"Server":            "Provisioning admin/2.0",
+			"X-API-Version":     "1.1",
 			"X-Service-Version": version,
 		},
 		Logger: log.New("admin"),
@@ -116,47 +124,31 @@ func main() {
 
 	// инициализируем HTTP-сервер для административной части сервиса
 	aserver := &http.Server{
-		Addr:         ahost,
+		Addr:         *ahost,
 		Handler:      adminMux,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 20,
 	}
 	go func() {
-		var (
-			secure = true                            // запускать с TLS
-			serts  = []string{"cert.pem", "key.pem"} // файлы с сертификатами
-		)
-		// если файлы с сертификатами отсутствуют, то не запускать TLS
-		for _, name := range serts {
-			if _, err := os.Stat(name); err != nil {
-				secure = false
-				break
-			}
-		}
 		log.Info("starting admin server",
-			"address", aserver.Addr,
-			"https", secure)
-		// в зависимости от наличия сертификатов запускается в соответствующем
-		// режиме
-		var err error
-		if secure {
-			err = aserver.ListenAndServeTLS(serts[0], serts[1])
-		} else {
-			err = aserver.ListenAndServe()
-		}
+			"address", aserver.Addr)
+		err = aserver.ListenAndServe()
 		if err != nil {
 			log.Warn("admin server stoped", "error", err)
 			os.Exit(3)
 		}
 	}()
 
+	// инициализируем обработку HTTP запросов
+	var httplogger = log.New("http")
 	var mux = &rest.ServeMux{
 		Headers: map[string]string{
-			"Server":            "Provisioning/1.0",
-			"X-API-Version":     "1.0",
-			"X-Service-Version": version,
+			"Server":                      app.Agent,
+			"X-API-Version":               "1.1",
+			"X-Service-Version":           version,
+			"Access-Control-Allow-Origin": "*",
 		},
-		Logger: log.New("http"),
+		Logger: httplogger,
 	}
 	mux.Handle("GET", "/config", store.Config)
 	mux.Handle("POST", "/reset/:name", store.PasswordToken)
@@ -165,52 +157,66 @@ func main() {
 	mux.Handle("GET", "/data", store.UserData)
 
 	var server = &http.Server{
-		Addr:         host,
+		Addr:         port,
 		Handler:      mux,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 20,
+		ErrorLog:     httplogger.StdLog(log.ERROR),
 	}
-	if !strings.HasPrefix(host, "localhost") &&
-		!strings.HasPrefix(host, "127.0.0.1") {
-		var manager = autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist(host),
-			Email:      "dmitrys@xyzrd.com",
-			Cache:      autocert.DirCache("letsEncript.cache"),
+	var hosts []string
+	// настраиваем автоматическое получение сертификата
+	if *letsencrypt != "" {
+		hosts = strings.Split(*letsencrypt, ",")
+		server.TLSConfig = app.LetsEncrypt(hosts...)
+		server.Addr = ":443" // подменяем порт на 443
+	} else {
+		tlsConfig, err := app.LoadCertificates(filepath.Join(".", "certs"))
+		if err != nil {
+			httplogger.Error("certificates error", err)
+			os.Exit(2)
 		}
-		server.TLSConfig = &tls.Config{
-			GetCertificate: manager.GetCertificate,
+		if tlsConfig != nil {
+			server.TLSConfig = tlsConfig
+			hosts = make([]string, 0, len(tlsConfig.NameToCertificate))
+			for name := range tlsConfig.NameToCertificate {
+				hosts = append(hosts, name)
+			}
 		}
-		server.Addr = ":https"
 	}
 
+	// отслеживаем сигнал о прерывании и останавливаем по нему сервер
 	go func() {
-		var secure = (server.Addr == ":https" || server.Addr == ":443")
-		var slog = log.With("address", server.Addr, "https", secure)
-		if server.Addr != host {
-			slog = slog.With("host", host)
-		}
-		slog.Info("starting main server")
-		if secure {
-			err = server.ListenAndServeTLS("", "")
-		} else {
-			err = server.ListenAndServe()
-		}
-		if err != nil {
-			log.Warn("main server stoped", "error", err)
-			os.Exit(3)
+		var sigint = make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt)
+		<-sigint
+		if err := server.Shutdown(context.Background()); err != nil {
+			httplogger.Error("server shutdown", err)
 		}
 	}()
+	// добавляем в статистику и выводим в лог информацию о запущенном сервере
+	if server.TLSConfig != nil {
+		// добавляем заголовок с обязательством использования защищенного
+		// соединения в ближайший час
+		mux.Headers["Strict-Transport-Security"] = "max-age=3600"
+	}
+	httplogger.Info("server",
+		"listen", server.Addr,
+		"tls", server.TLSConfig != nil,
+		"hosts", hosts,
+		"letsencrypt", *letsencrypt != "",
+	)
+	defer log.Info("service stoped")
 
-	monitorSignals(os.Interrupt, os.Kill)
-	log.Info("service stoped")
-}
-
-// monitorSignals запускает мониторинг сигналов и возвращает значение, когда
-// получает сигнал. В качестве параметров передается список сигналов, которые
-// нужно отслеживать.
-func monitorSignals(signals ...os.Signal) os.Signal {
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, signals...)
-	return <-signalChan
+	// в зависимости от того, поддерживаются сертификаты или нет, запускается
+	// разная версию веб-сервера
+	if server.TLSConfig != nil {
+		err = server.ListenAndServeTLS("", "")
+	} else {
+		err = server.ListenAndServe()
+	}
+	if err != http.ErrServerClosed {
+		httplogger.Error("server", err)
+	} else {
+		httplogger.Info("server stopped")
+	}
 }
