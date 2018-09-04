@@ -47,6 +47,11 @@ func main() {
 		log.Error("http host parse error", err)
 		os.Exit(2)
 	}
+	*ahost, err = app.Port(*ahost)
+	if err != nil {
+		log.Error("http admin host parse error", err)
+		os.Exit(2)
+	}
 
 	log.Info("opening store", "file", dbname)
 	store, err := OpenStore(dbname)
